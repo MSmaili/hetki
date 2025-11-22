@@ -7,7 +7,7 @@ type Client interface {
 	ListWindows(session string) ([]domain.Window, error)
 	HasSession(name string) bool
 
-	CreateSession(name string, opts *domain.SessionOptions) error
+	CreateSession(name string, opts *domain.Window) error
 	CreateWindow(session string, name string, opts *domain.Window) error
 
 	SetLayout(session string, window string, layout string) error
