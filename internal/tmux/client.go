@@ -3,12 +3,12 @@ package tmux
 import "github.com/MSmaili/tmx/internal/domain"
 
 type Client interface {
-	ListSessions() (map[string][]domain.WindowInfo, error)
-	ListWindows(session string) ([]domain.WindowInfo, error)
+	ListSessions() (map[string][]domain.Window, error)
+	ListWindows(session string) ([]domain.Window, error)
 	HasSession(name string) bool
 
-	CreateSession(name string, opts domain.SessionOptions) error
-	CreateWindow(session string, name string, opts domain.WindowOptions) error
+	CreateSession(name string, opts *domain.SessionOptions) error
+	CreateWindow(session string, name string, opts *domain.Window) error
 
 	SetLayout(session string, window string, layout string) error
 
