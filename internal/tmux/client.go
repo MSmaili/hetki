@@ -1,0 +1,19 @@
+package tmux
+
+import "github.com/MSmaili/tmx/internal/domain"
+
+type Client interface {
+	ListSessions() (map[string][]domain.WindowInfo, error)
+	ListWindows(session string) ([]domain.WindowInfo, error)
+	HasSession(name string) bool
+
+	CreateSession(name string, opts domain.SessionOptions) error
+	CreateWindow(session string, name string, opts domain.WindowOptions) error
+
+	SetLayout(session string, window string, layout string) error
+
+	Attach(session string) error
+
+	KillSession(name string) error
+	KillWindow(session, window string) error
+}
