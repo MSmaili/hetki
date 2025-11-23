@@ -5,10 +5,10 @@ import (
 )
 
 type Diff interface {
-	Compare(desiredConfig map[string][]domain.Window, currentSession map[string][]domain.Window) domain.Diff
+	Compare(desired, actual map[string][]domain.Window, mode domain.CompareMode) domain.Diff
 }
 
-func Compare(desired map[string][]domain.Window, actual map[string][]domain.Window) domain.Diff {
+func Compare(desired, actual map[string][]domain.Window, mode domain.CompareMode) domain.Diff {
 	diff := domain.Diff{
 		MissingWindows: make(map[string][]domain.Window),
 		ExtraWindows:   make(map[string][]domain.Window),
@@ -16,7 +16,7 @@ func Compare(desired map[string][]domain.Window, actual map[string][]domain.Wind
 	}
 
 	compareSessions(&diff, desired, actual)
-	compareWindows(&diff, desired, actual)
+	compareWindows(&diff, desired, actual, mode)
 
 	return diff
 }

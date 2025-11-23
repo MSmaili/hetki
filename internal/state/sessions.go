@@ -4,7 +4,7 @@ import (
 	"github.com/MSmaili/tmx/internal/domain"
 )
 
-func compareSessions(diff *domain.Diff, desired map[string][]domain.Window, actual map[string][]domain.Window) *domain.Diff {
+func compareSessions(diff *domain.Diff, desired, actual map[string][]domain.Window) *domain.Diff {
 
 	for session := range desired {
 		_, ok := actual[session]
