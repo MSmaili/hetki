@@ -16,6 +16,9 @@ type WindowList []domain.Window
 func (w *WindowList) UnmarshalJSON(data []byte) error {
 	var objForm []domain.Window
 	if err := json.Unmarshal(data, &objForm); err == nil {
+		for i := range objForm {
+			objForm[i].Index = i
+		}
 		*w = objForm
 		return nil
 	}
@@ -25,8 +28,9 @@ func (w *WindowList) UnmarshalJSON(data []byte) error {
 		windows := make([]domain.Window, len(paths))
 		for i, p := range paths {
 			windows[i] = domain.Window{
-				Path: p,
-				Name: inferNameFromPath(p),
+				Path:  p,
+				Index: i,
+				Name:  inferNameFromPath(p),
 			}
 		}
 		*w = windows
