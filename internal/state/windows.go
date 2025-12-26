@@ -17,13 +17,6 @@ func compareWindows(diff *Diff, desired, actual *State) {
 			diff.Windows[sessionName] = windowDiff
 		}
 	}
-
-	for _, sessionName := range diff.Sessions.Missing {
-		session := desired.Sessions[sessionName]
-		if len(session.Windows) > 0 {
-			diff.Windows[sessionName] = ItemDiff[Window]{Missing: cloneWindows(session.Windows)}
-		}
-	}
 }
 
 func compareSessionWindows(desired, actual []*Window) ItemDiff[Window] {

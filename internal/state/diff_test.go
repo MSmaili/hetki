@@ -123,5 +123,5 @@ func TestCompareWindowsForMissingSession(t *testing.T) {
 	diff := Compare(desired, actual)
 
 	assert.Contains(t, diff.Sessions.Missing, "new-session")
-	assert.Len(t, diff.Windows["new-session"].Missing, 2)
+	assert.Empty(t, diff.Windows["new-session"].Missing)
 }
