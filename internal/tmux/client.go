@@ -72,7 +72,7 @@ func (c *client) ExecuteBatch(actions []Action) error {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("tmux source failed: %v (%s)", err, stderr.String())
+		return fmt.Errorf("tmux source failed: %v\nstderr: %s\nscript:\n%s", err, stderr.String(), script.String())
 	}
 
 	return nil

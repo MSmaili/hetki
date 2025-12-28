@@ -97,8 +97,12 @@ func manifestToState(ws *manifest.Workspace) *state.State {
 	s := state.NewState()
 	for sessionName, windows := range ws.Sessions {
 		session := s.AddSession(sessionName)
-		for _, w := range windows {
-			window := &state.Window{Name: w.Name, Path: w.Path}
+		for i, w := range windows {
+			name := w.Name
+			if name == "" {
+				name = fmt.Sprintf("window-%d", i)
+			}
+			window := &state.Window{Name: name, Path: w.Path}
 			for _, p := range w.Panes {
 				window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
 			}
