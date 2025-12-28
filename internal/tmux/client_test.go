@@ -53,8 +53,8 @@ func TestRunQuery(t *testing.T) {
 	}{
 		{
 			name:   "success",
-			output: "dev\nwork",
-			want:   []Session{{Name: "dev"}, {Name: "work"}},
+			output: "dev|editor|~/code|vim",
+			want:   []Session{{Name: "dev", Windows: []Window{{Name: "editor", Path: "~/code", Panes: []Pane{{Path: "~/code", Command: "vim"}}}}}},
 		},
 		{
 			name:    "run error",
@@ -71,7 +71,7 @@ func TestRunQuery(t *testing.T) {
 				},
 			}
 
-			got, err := RunQuery(mock, ListSessionsQuery{})
+			got, err := RunQuery(mock, LoadStateQuery{})
 
 			if tt.wantErr {
 				assert.Error(t, err)
