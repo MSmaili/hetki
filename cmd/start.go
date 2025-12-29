@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/MSmaili/tms/internal/manifest"
 	"github.com/MSmaili/tms/internal/plan"
@@ -9,6 +10,8 @@ import (
 	"github.com/MSmaili/tms/internal/tmux"
 	"github.com/spf13/cobra"
 )
+
+const tmsWorkspacePathEnv = "TMS_WORKSPACE_PATH"
 
 var (
 	dryRun bool
@@ -25,6 +28,18 @@ func init() {
 	startCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print plan without executing")
 	startCmd.Flags().BoolVar(&force, "force", false, "Kill extra sessions/windows and recreate mismatched")
 	rootCmd.AddCommand(startCmd)
+}
+
+func buildSetEnvActions(sessionNames []string, path string) []tmux.Action {
+	actions := make([]tmux.Action, 0, len(sessionNames))
+	for _, name := range sessionNames {
+		actions = append(actions, tmux.SetEnvironment{
+			Session: name,
+			Name:    tmsWorkspacePathEnv,
+			Value:   path,
+		})
+	}
+	return actions
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
@@ -81,6 +96,18 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return nil
 	} else {
 		actions := planActionsToTmuxActions(p.Actions)
+
+		absPath, err := filepath.Abs(workspacePath)
+		if err != nil {
+			return fmt.Errorf("resolving workspace path: %w", err)
+		}
+
+		sessionNames := make([]string, 0, len(workspace.Sessions))
+		for name := range workspace.Sessions {
+			sessionNames = append(sessionNames, name)
+		}
+		actions = append(actions, buildSetEnvActions(sessionNames, absPath)...)
+
 		if err := client.ExecuteBatch(actions); err != nil {
 			return fmt.Errorf("executing plan: %w", err)
 		}
