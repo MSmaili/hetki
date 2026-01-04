@@ -10,6 +10,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func GetConfigDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "tms"), nil
+}
+
 type Loader interface {
 	Load() (*Workspace, error)
 }
@@ -100,6 +108,30 @@ func expandPath(p string) string {
 		return filepath.Join(home, strings.TrimPrefix(p, "~"))
 	}
 	return p
+}
+
+func ScanWorkspaces(dir string) (map[string]string, error) {
+	expandedDir := expandPath(dir)
+	entries, err := os.ReadDir(expandedDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("reading directory: %w", err)
+	}
+
+	paths := make(map[string]string)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		ext := filepath.Ext(name)
+		if ext == ".yaml" || ext == ".yml" || ext == ".json" {
+			paths[strings.TrimSuffix(name, ext)] = filepath.Join(expandedDir, name)
+		}
+	}
+	return paths, nil
 }
 
 func loadFromMemory(data []byte) (*Workspace, error) {

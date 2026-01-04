@@ -13,7 +13,7 @@ type Resolver struct {
 
 func NewResolver() *Resolver {
 	return &Resolver{
-		configDir: os.UserConfigDir,
+		configDir: GetConfigDir,
 	}
 }
 

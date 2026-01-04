@@ -116,3 +116,42 @@ func TestLoadYAMLWithPanes(t *testing.T) {
 	assert.Equal(t, "vim", workspace.Sessions["myapp"][0].Panes[0].Command)
 	assert.Equal(t, "vertical", workspace.Sessions["myapp"][0].Panes[0].Split)
 }
+
+func TestScanWorkspaces(t *testing.T) {
+	t.Run("scans directory with multiple files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		
+		os.WriteFile(filepath.Join(tmpDir, "project1.yaml"), []byte("sessions: {}"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "project2.yml"), []byte("sessions: {}"), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "project3.json"), []byte(`{"sessions":{}}`), 0644)
+		os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("text"), 0644)
+		
+		names, err := ScanWorkspaces(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"project1", "project2", "project3"}, names)
+	})
+	
+	t.Run("returns empty for missing directory", func(t *testing.T) {
+		names, err := ScanWorkspaces("/nonexistent/directory")
+		require.NoError(t, err)
+		assert.Empty(t, names)
+	})
+	
+	t.Run("returns empty for empty directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		names, err := ScanWorkspaces(tmpDir)
+		require.NoError(t, err)
+		assert.Empty(t, names)
+	})
+	
+	t.Run("ignores subdirectories", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		
+		os.WriteFile(filepath.Join(tmpDir, "workspace.yaml"), []byte("sessions: {}"), 0644)
+		os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755)
+		
+		names, err := ScanWorkspaces(tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"workspace"}, names)
+	})
+}
