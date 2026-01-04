@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -88,16 +89,14 @@ func (q PaneBaseIndexQuery) Parse(output string) (int, error) {
 	return idx, err
 }
 
-// GetCurrentSession returns the current tmux session name from $TMUX env var
-// Returns empty string if not in a tmux session
 func GetCurrentSession() string {
 	tmuxEnv := strings.TrimSpace(os.Getenv("TMUX"))
 	if tmuxEnv == "" {
 		return ""
 	}
-	parts := strings.Split(tmuxEnv, ",")
-	if len(parts) < 3 {
+	out, err := exec.Command("tmux", "display-message", "-p", "#S").Output()
+	if err != nil {
 		return ""
 	}
-	return parts[2]
+	return strings.TrimSpace(string(out))
 }
