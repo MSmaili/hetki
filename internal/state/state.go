@@ -1,8 +1,8 @@
 package state
 
-// State represents tmux state for diffing purposes
 type State struct {
-	Sessions map[string]*Session
+	Sessions      map[string]*Session
+	PaneBaseIndex int
 }
 
 type Session struct {

@@ -81,15 +81,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	stateDiff := state.Compare(desired, actual)
 
-	paneBaseIndex, _ := tmux.RunQuery(client, tmux.PaneBaseIndexQuery{})
-
 	planDiff := stateDiffToPlanDiff(stateDiff, desired)
 
 	var strategy plan.Strategy
 	if force {
-		strategy = &plan.ForceStrategy{PaneBaseIndex: paneBaseIndex}
+		strategy = &plan.ForceStrategy{PaneBaseIndex: actual.PaneBaseIndex}
 	} else {
-		strategy = &plan.MergeStrategy{PaneBaseIndex: paneBaseIndex}
+		strategy = &plan.MergeStrategy{PaneBaseIndex: actual.PaneBaseIndex}
 	}
 	p := strategy.Plan(planDiff)
 
@@ -153,6 +151,8 @@ func queryTmuxState(client tmux.Client) (*state.State, error) {
 	if err != nil {
 		return s, nil
 	}
+
+	s.PaneBaseIndex = result.PaneBaseIndex
 
 	for _, sess := range result.Sessions {
 		session := s.AddSession(sess.Name)

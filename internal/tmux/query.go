@@ -20,68 +20,117 @@ type Session struct {
 type LoadStateResult struct {
 	Sessions       []Session
 	CurrentSession string
+	PaneBaseIndex  int
 }
 
 type LoadStateQuery struct{}
 
+// Args returns args for batched query (list-panes + pane-base-index)
 func (q LoadStateQuery) Args() []string {
-	return []string{"list-panes", "-a", "-F", "#{session_id}|#{session_name}|#{window_name}|#{pane_current_path}|#{pane_current_command}|#{TMS_WORKSPACE_PATH}"}
+	return []string{
+		"list-panes", "-a",
+		"-F", "#{session_id}|#{session_name}|#{window_name}|#{pane_current_path}|#{pane_current_command}|#{TMS_WORKSPACE_PATH}",
+		";", "show-options", "-gv", "pane-base-index",
+	}
 }
 
 func (q LoadStateQuery) Parse(output string) (LoadStateResult, error) {
-	result := LoadStateResult{}
-	currentSessionID := getCurrentSessionID()
-
 	if output == "" {
-		return result, nil
+		return LoadStateResult{}, nil
 	}
 
-	sessionMap := make(map[string]*Session)
+	currentID := getCurrentSessionID()
+	builder := newStateBuilder()
 
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if p, ok := parsePaneLine(line); ok {
+			builder.addPane(p, currentID)
 		}
-
-		parts := strings.Split(line, "|")
-		if len(parts) < 6 {
-			continue
-		}
-
-		sessID, sessName, winName, panePath, paneCmd, workspacePath := parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
-
-		if sessID == currentSessionID {
-			result.CurrentSession = sessName
-		}
-
-		session, ok := sessionMap[sessName]
-		if !ok {
-			session = &Session{Name: sessName, WorkspacePath: workspacePath}
-			sessionMap[sessName] = session
-		}
-
-		var window *Window
-		for i := range session.Windows {
-			if session.Windows[i].Name == winName {
-				window = &session.Windows[i]
-				break
-			}
-		}
-		if window == nil {
-			session.Windows = append(session.Windows, Window{Name: winName, Path: panePath})
-			window = &session.Windows[len(session.Windows)-1]
-		}
-
-		window.Panes = append(window.Panes, Pane{Path: panePath, Command: paneCmd})
 	}
 
-	result.Sessions = make([]Session, 0, len(sessionMap))
-	for _, s := range sessionMap {
-		result.Sessions = append(result.Sessions, *s)
+	// Last line is pane-base-index from show-options
+	result := builder.result()
+	if len(lines) > 0 {
+		lastLine := strings.TrimSpace(lines[len(lines)-1])
+		fmt.Sscanf(lastLine, "%d", &result.PaneBaseIndex)
 	}
 
 	return result, nil
+}
+
+type paneLine struct {
+	sessionID, sessionName, windowName, panePath, paneCmd, workspaceEnvPath string
+}
+
+func parsePaneLine(line string) (paneLine, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return paneLine{}, false
+	}
+
+	var p paneLine
+	var ok bool
+	if p.sessionID, line, ok = strings.Cut(line, "|"); !ok {
+		return paneLine{}, false
+	}
+	if p.sessionName, line, ok = strings.Cut(line, "|"); !ok {
+		return paneLine{}, false
+	}
+	if p.windowName, line, ok = strings.Cut(line, "|"); !ok {
+		return paneLine{}, false
+	}
+	if p.panePath, line, ok = strings.Cut(line, "|"); !ok {
+		return paneLine{}, false
+	}
+	p.paneCmd, p.workspaceEnvPath, _ = strings.Cut(line, "|")
+	return p, true
+}
+
+type stateBuilder struct {
+	sessions       map[string]*Session
+	currentSession string
+}
+
+func newStateBuilder() *stateBuilder {
+	return &stateBuilder{sessions: make(map[string]*Session)}
+}
+
+func (b *stateBuilder) addPane(p paneLine, currentID string) {
+	if p.sessionID == currentID {
+		b.currentSession = p.sessionName
+	}
+
+	sess := b.getOrCreateSession(p.sessionName, p.workspaceEnvPath)
+	win := b.getOrCreateWindow(sess, p.windowName, p.panePath)
+	win.Panes = append(win.Panes, Pane{Path: p.panePath, Command: p.paneCmd})
+}
+
+func (b *stateBuilder) getOrCreateSession(name, workspacePath string) *Session {
+	if sess, ok := b.sessions[name]; ok {
+		return sess
+	}
+	sess := &Session{Name: name, WorkspacePath: workspacePath}
+	b.sessions[name] = sess
+	return sess
+}
+
+func (b *stateBuilder) getOrCreateWindow(sess *Session, name, path string) *Window {
+	for i := range sess.Windows {
+		if sess.Windows[i].Name == name {
+			return &sess.Windows[i]
+		}
+	}
+	sess.Windows = append(sess.Windows, Window{Name: name, Path: path})
+	return &sess.Windows[len(sess.Windows)-1]
+}
+
+func (b *stateBuilder) result() LoadStateResult {
+	sessions := make([]Session, 0, len(b.sessions))
+	for _, s := range b.sessions {
+		sessions = append(sessions, *s)
+	}
+	return LoadStateResult{Sessions: sessions, CurrentSession: b.currentSession}
 }
 
 func getCurrentSessionID() string {

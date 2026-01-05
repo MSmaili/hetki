@@ -48,13 +48,16 @@ func TestRunQuery(t *testing.T) {
 		name    string
 		output  string
 		runErr  error
-		want    []Session
+		want    LoadStateResult
 		wantErr bool
 	}{
 		{
 			name:   "success",
-			output: "dev|editor|~/code|vim|",
-			want:   []Session{{Name: "dev", WorkspacePath: "", Windows: []Window{{Name: "editor", Path: "~/code", Panes: []Pane{{Path: "~/code", Command: "vim"}}}}}},
+			output: "$1|dev|editor|~/code|vim|\n0",
+			want: LoadStateResult{
+				Sessions:      []Session{{Name: "dev", Windows: []Window{{Name: "editor", Path: "~/code", Panes: []Pane{{Path: "~/code", Command: "vim"}}}}}},
+				PaneBaseIndex: 0,
+			},
 		},
 		{
 			name:    "run error",
