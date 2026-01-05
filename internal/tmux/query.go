@@ -25,7 +25,6 @@ type LoadStateResult struct {
 
 type LoadStateQuery struct{}
 
-// Args returns args for batched query (list-panes + pane-base-index)
 func (q LoadStateQuery) Args() []string {
 	return []string{
 		"list-panes", "-a",
@@ -49,7 +48,6 @@ func (q LoadStateQuery) Parse(output string) (LoadStateResult, error) {
 		}
 	}
 
-	// Last line is pane-base-index from show-options
 	result := builder.result()
 	if len(lines) > 0 {
 		lastLine := strings.TrimSpace(lines[len(lines)-1])
@@ -143,20 +141,4 @@ func getCurrentSessionID() string {
 		return ""
 	}
 	return "$" + parts[2]
-}
-
-type PaneBaseIndexQuery struct{}
-
-func (q PaneBaseIndexQuery) Args() []string {
-	return []string{"show-options", "-gv", "pane-base-index"}
-}
-
-func (q PaneBaseIndexQuery) Parse(output string) (int, error) {
-	output = strings.TrimSpace(output)
-	if output == "" {
-		return 0, nil
-	}
-	var idx int
-	_, err := fmt.Sscanf(output, "%d", &idx)
-	return idx, err
 }

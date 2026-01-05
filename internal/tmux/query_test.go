@@ -80,29 +80,3 @@ func TestLoadStateQuery(t *testing.T) {
 		})
 	}
 }
-
-func TestPaneBaseIndexQuery(t *testing.T) {
-	q := PaneBaseIndexQuery{}
-
-	t.Run("args", func(t *testing.T) {
-		assert.Equal(t, []string{"show-options", "-gv", "pane-base-index"}, q.Args())
-	})
-
-	tests := []struct {
-		name   string
-		output string
-		want   int
-	}{
-		{"empty", "", 0},
-		{"zero", "0", 0},
-		{"one", "1", 1},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := q.Parse(tt.output)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
