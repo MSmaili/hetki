@@ -37,6 +37,113 @@ func init() {
 	}
 }
 
+func runStart(cmd *cobra.Command, args []string) error {
+	workspace, workspacePath, err := loadWorkspaceFromArgs(args)
+	if err != nil {
+		return err
+	}
+
+	client, err := tmux.New()
+	if err != nil {
+		return fmt.Errorf("initializing tmux client: %w", err)
+	}
+
+	p, err := buildPlan(client, workspace)
+	if err != nil {
+		return err
+	}
+
+	return executePlan(client, p, workspace, workspacePath)
+}
+
+func loadWorkspaceFromArgs(args []string) (*manifest.Workspace, string, error) {
+	var nameOrPath string
+	if len(args) > 0 {
+		nameOrPath = args[0]
+	}
+
+	resolver := manifest.NewResolver()
+	workspacePath, err := resolver.Resolve(nameOrPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	loader := manifest.NewFileLoader(workspacePath)
+	workspace, err := loader.Load()
+	if err != nil {
+		return nil, "", fmt.Errorf("loading workspace: %w", err)
+	}
+
+	return workspace, workspacePath, nil
+}
+
+func buildPlan(client tmux.Client, workspace *manifest.Workspace) (*plan.Plan, error) {
+	desired := manifestToState(workspace)
+
+	actual, err := queryTmuxState(client)
+	if err != nil {
+		return nil, fmt.Errorf("querying tmux state: %w", err)
+	}
+
+	diff := state.Compare(desired, actual)
+	planDiff := stateDiffToPlanDiff(diff, desired)
+
+	strategy := selectStrategy(actual.PaneBaseIndex)
+	return strategy.Plan(planDiff), nil
+}
+
+func selectStrategy(paneBaseIndex int) plan.Strategy {
+	if force {
+		return &plan.ForceStrategy{PaneBaseIndex: paneBaseIndex}
+	}
+	return &plan.MergeStrategy{PaneBaseIndex: paneBaseIndex}
+}
+
+func executePlan(client tmux.Client, p *plan.Plan, workspace *manifest.Workspace, workspacePath string) error {
+	if p.IsEmpty() {
+		fmt.Println("Workspace already up to date")
+		return attachToSession(client, workspace)
+	}
+
+	if dryRun {
+		printDryRun(p)
+		return nil
+	}
+
+	if err := executeActions(client, p, workspace, workspacePath); err != nil {
+		return err
+	}
+
+	return attachToSession(client, workspace)
+}
+
+func printDryRun(p *plan.Plan) {
+	fmt.Println("Dry run - actions to execute:")
+	for _, action := range p.Actions {
+		fmt.Printf("  %s\n", action.Comment())
+	}
+}
+
+func executeActions(client tmux.Client, p *plan.Plan, workspace *manifest.Workspace, workspacePath string) error {
+	actions := planActionsToTmuxActions(p.Actions)
+
+	absPath, err := filepath.Abs(workspacePath)
+	if err != nil {
+		return fmt.Errorf("resolving workspace path: %w", err)
+	}
+
+	sessionNames := make([]string, 0, len(workspace.Sessions))
+	for name := range workspace.Sessions {
+		sessionNames = append(sessionNames, name)
+	}
+	actions = append(actions, buildSetEnvActions(sessionNames, absPath)...)
+
+	if err := client.ExecuteBatch(actions); err != nil {
+		return fmt.Errorf("executing plan: %w", err)
+	}
+	return nil
+}
+
 func buildSetEnvActions(sessionNames []string, path string) []tmux.Action {
 	actions := make([]tmux.Action, 0, len(sessionNames))
 	for _, name := range sessionNames {
@@ -49,79 +156,10 @@ func buildSetEnvActions(sessionNames []string, path string) []tmux.Action {
 	return actions
 }
 
-func runStart(cmd *cobra.Command, args []string) error {
-	var nameOrPath string
-	if len(args) > 0 {
-		nameOrPath = args[0]
-	}
-
-	resolver := manifest.NewResolver()
-	workspacePath, err := resolver.Resolve(nameOrPath)
-	if err != nil {
-		return err
-	}
-
-	loader := manifest.NewFileLoader(workspacePath)
-	workspace, err := loader.Load()
-	if err != nil {
-		return fmt.Errorf("loading workspace: %w", err)
-	}
-
-	client, err := tmux.New()
-	if err != nil {
-		return fmt.Errorf("initializing tmux client: %w", err)
-	}
-
-	desired := manifestToState(workspace)
-
-	actual, err := queryTmuxState(client)
-	if err != nil {
-		return fmt.Errorf("querying tmux state: %w", err)
-	}
-
-	stateDiff := state.Compare(desired, actual)
-
-	planDiff := stateDiffToPlanDiff(stateDiff, desired)
-
-	var strategy plan.Strategy
-	if force {
-		strategy = &plan.ForceStrategy{PaneBaseIndex: actual.PaneBaseIndex}
-	} else {
-		strategy = &plan.MergeStrategy{PaneBaseIndex: actual.PaneBaseIndex}
-	}
-	p := strategy.Plan(planDiff)
-
-	if p.IsEmpty() {
-		fmt.Println("Workspace already up to date")
-	} else if dryRun {
-		fmt.Println("Dry run - actions to execute:")
-		for _, action := range p.Actions {
-			fmt.Printf("  %s\n", action.Comment())
-		}
-		return nil
-	} else {
-		actions := planActionsToTmuxActions(p.Actions)
-
-		absPath, err := filepath.Abs(workspacePath)
-		if err != nil {
-			return fmt.Errorf("resolving workspace path: %w", err)
-		}
-
-		sessionNames := make([]string, 0, len(workspace.Sessions))
-		for name := range workspace.Sessions {
-			sessionNames = append(sessionNames, name)
-		}
-		actions = append(actions, buildSetEnvActions(sessionNames, absPath)...)
-
-		if err := client.ExecuteBatch(actions); err != nil {
-			return fmt.Errorf("executing plan: %w", err)
-		}
-	}
-
+func attachToSession(client tmux.Client, workspace *manifest.Workspace) error {
 	for sessionName := range workspace.Sessions {
 		return client.Attach(sessionName)
 	}
-
 	return nil
 }
 
@@ -130,42 +168,48 @@ func manifestToState(ws *manifest.Workspace) *state.State {
 	for sessionName, windows := range ws.Sessions {
 		session := s.AddSession(sessionName)
 		for i, w := range windows {
-			name := w.Name
-			if name == "" {
-				name = fmt.Sprintf("window-%d", i)
-			}
-			window := &state.Window{Name: name, Path: w.Path, Layout: w.Layout}
-			for _, p := range w.Panes {
-				window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
-			}
-			session.Windows = append(session.Windows, window)
+			session.Windows = append(session.Windows, manifestWindowToState(w, i))
 		}
 	}
 	return s
 }
 
-func queryTmuxState(client tmux.Client) (*state.State, error) {
-	s := state.NewState()
+func manifestWindowToState(w manifest.Window, index int) *state.Window {
+	name := w.Name
+	if name == "" {
+		name = fmt.Sprintf("window-%d", index)
+	}
+	window := &state.Window{Name: name, Path: w.Path, Layout: w.Layout}
+	for _, p := range w.Panes {
+		window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
+	}
+	return window
+}
 
+func queryTmuxState(client tmux.Client) (*state.State, error) {
 	result, err := tmux.RunQuery(client, tmux.LoadStateQuery{})
 	if err != nil {
-		return s, nil
+		return state.NewState(), nil
 	}
 
+	s := state.NewState()
 	s.PaneBaseIndex = result.PaneBaseIndex
 
 	for _, sess := range result.Sessions {
 		session := s.AddSession(sess.Name)
 		for _, w := range sess.Windows {
-			window := &state.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
-			for _, p := range w.Panes {
-				window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
-			}
-			session.Windows = append(session.Windows, window)
+			session.Windows = append(session.Windows, tmuxWindowToState(w))
 		}
 	}
-
 	return s, nil
+}
+
+func tmuxWindowToState(w tmux.Window) *state.Window {
+	window := &state.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
+	for _, p := range w.Panes {
+		window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
+	}
+	return window
 }
 
 func stateDiffToPlanDiff(sd state.Diff, desired *state.State) plan.Diff {
@@ -173,52 +217,56 @@ func stateDiffToPlanDiff(sd state.Diff, desired *state.State) plan.Diff {
 		Windows: make(map[string]plan.ItemDiff[plan.Window]),
 	}
 
-	for _, sessionName := range sd.Sessions.Missing {
-		session := desired.Sessions[sessionName]
-		ps := plan.Session{Name: sessionName}
-		for _, w := range session.Windows {
-			pw := plan.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
-			for _, p := range w.Panes {
-				pw.Panes = append(pw.Panes, plan.Pane{Path: p.Path, Command: p.Command})
-			}
-			ps.Windows = append(ps.Windows, pw)
-		}
-		pd.Sessions.Missing = append(pd.Sessions.Missing, ps)
-	}
-
-	for _, sessionName := range sd.Sessions.Extra {
-		pd.Sessions.Extra = append(pd.Sessions.Extra, plan.Session{Name: sessionName})
-	}
+	pd.Sessions.Missing = convertMissingSessions(sd.Sessions.Missing, desired)
+	pd.Sessions.Extra = convertExtraSessions(sd.Sessions.Extra)
 
 	for sessionName, wd := range sd.Windows {
-		pwd := plan.ItemDiff[plan.Window]{}
-
-		for _, w := range wd.Missing {
-			pw := plan.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
-			for _, p := range w.Panes {
-				pw.Panes = append(pw.Panes, plan.Pane{Path: p.Path, Command: p.Command})
-			}
-			pwd.Missing = append(pwd.Missing, pw)
-		}
-
-		for _, w := range wd.Extra {
-			pwd.Extra = append(pwd.Extra, plan.Window{Name: w.Name, Path: w.Path})
-		}
-
-		for _, m := range wd.Mismatched {
-			pwd.Mismatched = append(pwd.Mismatched, plan.Mismatch[plan.Window]{
-				Desired: stateWindowToPlanWindow(m.Desired),
-				Actual:  stateWindowToPlanWindow(m.Actual),
-			})
-		}
-
-		pd.Windows[sessionName] = pwd
+		pd.Windows[sessionName] = convertWindowDiff(wd)
 	}
 
 	return pd
 }
 
-func stateWindowToPlanWindow(w state.Window) plan.Window {
+func convertMissingSessions(names []string, desired *state.State) []plan.Session {
+	sessions := make([]plan.Session, 0, len(names))
+	for _, name := range names {
+		session := desired.Sessions[name]
+		ps := plan.Session{Name: name}
+		for _, w := range session.Windows {
+			ps.Windows = append(ps.Windows, stateWindowToPlan(w))
+		}
+		sessions = append(sessions, ps)
+	}
+	return sessions
+}
+
+func convertExtraSessions(names []string) []plan.Session {
+	sessions := make([]plan.Session, 0, len(names))
+	for _, name := range names {
+		sessions = append(sessions, plan.Session{Name: name})
+	}
+	return sessions
+}
+
+func convertWindowDiff(wd state.ItemDiff[state.Window]) plan.ItemDiff[plan.Window] {
+	pwd := plan.ItemDiff[plan.Window]{}
+
+	for _, w := range wd.Missing {
+		pwd.Missing = append(pwd.Missing, stateWindowToPlan(&w))
+	}
+	for _, w := range wd.Extra {
+		pwd.Extra = append(pwd.Extra, plan.Window{Name: w.Name, Path: w.Path})
+	}
+	for _, m := range wd.Mismatched {
+		pwd.Mismatched = append(pwd.Mismatched, plan.Mismatch[plan.Window]{
+			Desired: stateWindowToPlan(&m.Desired),
+			Actual:  stateWindowToPlan(&m.Actual),
+		})
+	}
+	return pwd
+}
+
+func stateWindowToPlan(w *state.Window) plan.Window {
 	pw := plan.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
 	for _, p := range w.Panes {
 		pw.Panes = append(pw.Panes, plan.Pane{Path: p.Path, Command: p.Command})
@@ -227,9 +275,11 @@ func stateWindowToPlanWindow(w state.Window) plan.Window {
 }
 
 func planActionsToTmuxActions(actions []plan.Action) []tmux.Action {
-	var result []tmux.Action
+	result := make([]tmux.Action, 0, len(actions))
 	for _, a := range actions {
-		result = append(result, planActionToTmuxAction(a))
+		if ta := planActionToTmuxAction(a); ta != nil {
+			result = append(result, ta)
+		}
 	}
 	return result
 }
