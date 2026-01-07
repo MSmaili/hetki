@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/MSmaili/tms/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +33,7 @@ func init() {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logger.Error("%v", err)
 		os.Exit(1)
 	}
 }

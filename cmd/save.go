@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/MSmaili/tms/internal/logger"
 	"github.com/MSmaili/tms/internal/manifest"
 	"github.com/MSmaili/tms/internal/tmux"
 	"github.com/spf13/cobra"
@@ -138,7 +139,7 @@ func saveWorkspace(client tmux.Client, sessions []tmux.Session, outputPath strin
 		return err
 	}
 
-	fmt.Printf("Saved to %s\n", absPath)
+	logger.Success("Saved to %s", absPath)
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/MSmaili/tms/internal/logger"
 	"github.com/MSmaili/tms/internal/manifest"
 	"github.com/MSmaili/tms/internal/plan"
 	"github.com/MSmaili/tms/internal/state"
@@ -101,7 +102,7 @@ func selectStrategy(paneBaseIndex int) plan.Strategy {
 
 func executePlan(client tmux.Client, p *plan.Plan, workspace *manifest.Workspace, workspacePath string) error {
 	if p.IsEmpty() {
-		fmt.Println("Workspace already up to date")
+		logger.Info("Workspace already up to date")
 		return attachToSession(client, workspace)
 	}
 
@@ -118,9 +119,9 @@ func executePlan(client tmux.Client, p *plan.Plan, workspace *manifest.Workspace
 }
 
 func printDryRun(p *plan.Plan) {
-	fmt.Println("Dry run - actions to execute:")
+	logger.Info("Dry run - actions to execute:")
 	for _, action := range p.Actions {
-		fmt.Printf("  %s\n", action.Comment())
+		logger.Plain("  %s", action.Comment())
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/MSmaili/tms/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +20,7 @@ func init() {
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
-	fmt.Println("Updating tms...")
+	logger.Info("Updating tms...")
 
 	installCmd := exec.Command("bash", "-c",
 		"curl -fsSL https://raw.githubusercontent.com/MSmaili/tms/main/install.sh | bash")
