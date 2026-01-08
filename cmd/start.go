@@ -46,7 +46,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	client, err := tmux.New()
 	if err != nil {
-		return fmt.Errorf("initializing tmux client: %w", err)
+		return fmt.Errorf("failed to connect to tmux: %w\nHint: Make sure tmux server is running", err)
 	}
 
 	p, err := buildPlan(client, workspace)
@@ -83,7 +83,7 @@ func buildPlan(client tmux.Client, workspace *manifest.Workspace) (*plan.Plan, e
 
 	actual, err := queryTmuxState(client)
 	if err != nil {
-		return nil, fmt.Errorf("querying tmux state: %w", err)
+		return nil, fmt.Errorf("failed to query tmux state: %w", err)
 	}
 
 	diff := state.Compare(desired, actual)
@@ -140,7 +140,7 @@ func executeActions(client tmux.Client, p *plan.Plan, workspace *manifest.Worksp
 	actions = append(actions, buildSetEnvActions(sessionNames, absPath)...)
 
 	if err := client.ExecuteBatch(actions); err != nil {
-		return fmt.Errorf("executing plan: %w", err)
+		return fmt.Errorf("failed to execute plan: %w\nHint: Check tmux server logs or try with --dry-run to see planned actions", err)
 	}
 	return nil
 }

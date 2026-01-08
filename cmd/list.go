@@ -95,18 +95,18 @@ func runList(cmd *cobra.Command, args []string) error {
 func validateListFlags(mode string) error {
 	validFormats := map[string]bool{"flat": true, "indent": true, "tree": true, "json": true}
 	if !validFormats[listFormat] {
-		return fmt.Errorf("invalid format %q, must be: flat, indent, tree, json", listFormat)
+		return fmt.Errorf("invalid format %q\nValid formats: flat, indent, tree, json\nExample: tms list --format=tree", listFormat)
 	}
 	if mode == "workspaces" {
 		if listWindows && !listSessions {
-			return fmt.Errorf("--windows requires --sessions")
+			return fmt.Errorf("--windows requires --sessions\nExample: tms list workspaces --sessions --windows")
 		}
 		if listCurrent {
-			return fmt.Errorf("--current only works with sessions")
+			return fmt.Errorf("--current only works with sessions\nExample: tms list sessions --current")
 		}
 	}
 	if listPanes && !listWindows {
-		return fmt.Errorf("--panes requires --windows")
+		return fmt.Errorf("--panes requires --windows\nExample: tms list sessions --windows --panes")
 	}
 	return nil
 }
@@ -114,12 +114,12 @@ func validateListFlags(mode string) error {
 func listWorkspaceFiles() error {
 	configDir, err := manifest.GetConfigDir()
 	if err != nil {
-		return fmt.Errorf("getting config dir: %w", err)
+		return fmt.Errorf("failed to get config directory: %w", err)
 	}
 
 	paths, err := manifest.ScanWorkspaces(configDir + "/workspaces")
 	if err != nil {
-		return fmt.Errorf("scanning workspaces: %w", err)
+		return fmt.Errorf("failed to scan workspaces: %w", err)
 	}
 
 	names := sortedKeys(paths)
@@ -167,12 +167,12 @@ func listWorkspaceFiles() error {
 func listTmuxSessions() error {
 	client, err := tmux.New()
 	if err != nil {
-		return fmt.Errorf("initializing tmux client: %w", err)
+		return fmt.Errorf("failed to connect to tmux: %w\nHint: Make sure tmux is running", err)
 	}
 
 	result, err := tmux.RunQuery(client, tmux.LoadStateQuery{})
 	if err != nil {
-		return fmt.Errorf("querying tmux: %w", err)
+		return fmt.Errorf("failed to query tmux sessions: %w", err)
 	}
 
 	sessions := result.Sessions

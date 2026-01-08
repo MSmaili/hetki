@@ -64,7 +64,7 @@ func (r *Resolver) isPath(s string) bool {
 func (r *Resolver) resolveAsPath(path string) (string, error) {
 	expanded := expandPath(path)
 	if _, err := os.Stat(expanded); err != nil {
-		return "", fmt.Errorf("workspace file not found: %s", expanded)
+		return "", fmt.Errorf("workspace file not found: %s\nHint: Check the path or use a workspace name instead", expanded)
 	}
 	return expanded, nil
 }
@@ -87,7 +87,7 @@ func (r *Resolver) findNamedWorkspace(name string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("named workspace not found: %s", name)
+	return "", fmt.Errorf("named workspace not found: %s\nHint: List available workspaces with 'tms list' or create one with 'tms save -n %s'", name, name)
 }
 
 func (r *Resolver) findLocalWorkspace() (string, error) {
@@ -103,5 +103,5 @@ func (r *Resolver) findLocalWorkspace() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no local workspace found (.tms.{yaml,yml,json})")
+	return "", fmt.Errorf("no local workspace found (.tms.{yaml,yml,json})\nHint: Create one with 'tms save .' or specify a workspace name")
 }

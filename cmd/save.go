@@ -43,7 +43,7 @@ func runSave(cmd *cobra.Command, args []string) error {
 
 	client, err := tmux.New()
 	if err != nil {
-		return fmt.Errorf("initializing tmux client: %w", err)
+		return fmt.Errorf("failed to connect to tmux: %w\nHint: Make sure tmux is running", err)
 	}
 
 	sessions, existingPath, err := getTargetSessions(client)
@@ -61,7 +61,7 @@ func runSave(cmd *cobra.Command, args []string) error {
 
 func validateSaveFlags() error {
 	if savePath != "" && saveName != "" {
-		return fmt.Errorf("cannot use both -p and -n flags")
+		return fmt.Errorf("cannot use both -p and -n flags\nUse either: tms save -p <path> OR tms save -n <name>")
 	}
 	return nil
 }
@@ -69,11 +69,11 @@ func validateSaveFlags() error {
 func getTargetSessions(client tmux.Client) ([]tmux.Session, string, error) {
 	result, err := tmux.RunQuery(client, tmux.LoadStateQuery{})
 	if err != nil {
-		return nil, "", fmt.Errorf("querying tmux state: %w", err)
+		return nil, "", fmt.Errorf("failed to query tmux sessions: %w", err)
 	}
 
 	if len(result.Sessions) == 0 {
-		return nil, "", fmt.Errorf("no tmux sessions found")
+		return nil, "", fmt.Errorf("no tmux sessions found\nHint: Create a session first with 'tmux new -s <name>'")
 	}
 
 	if saveAll {
@@ -85,7 +85,7 @@ func getTargetSessions(client tmux.Client) ([]tmux.Session, string, error) {
 
 func findCurrentSession(result tmux.LoadStateResult) ([]tmux.Session, string, error) {
 	if result.CurrentSession == "" {
-		return nil, "", fmt.Errorf("not in a tmux session")
+		return nil, "", fmt.Errorf("not in a tmux session\nHint: Run this command from inside tmux, or use --all with -p/-n/.")
 	}
 
 	for _, s := range result.Sessions {
@@ -113,14 +113,14 @@ func determineSavePath(args []string, existingPath string) (string, error) {
 	}
 
 	if saveAll {
-		return "", fmt.Errorf("--all requires -p <path>, -n <name>, or .")
+		return "", fmt.Errorf("--all requires a destination\nUse: tms save --all -p <path>, tms save --all -n <name>, or tms save --all .")
 	}
 
 	if existingPath != "" {
 		return existingPath, nil
 	}
 
-	return "", fmt.Errorf("no workspace path found. Use -p <path>, -n <name>, or . for current directory")
+	return "", fmt.Errorf("no workspace path found\nHint: This session wasn't started by tms. Use -p <path>, -n <name>, or . to specify where to save")
 }
 
 func saveWorkspace(client tmux.Client, sessions []tmux.Session, outputPath string) error {
