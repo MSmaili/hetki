@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MSmaili/tms/internal/converter"
 	"github.com/MSmaili/tms/internal/logger"
 	"github.com/MSmaili/tms/internal/manifest"
 	"github.com/MSmaili/tms/internal/plan"
@@ -84,7 +85,7 @@ func loadWorkspaceFromArgs(args []string) (*manifest.Workspace, string, error) {
 }
 
 func buildPlan(client tmux.Client, workspace *manifest.Workspace) (*plan.Plan, error) {
-	desired := manifestToState(workspace)
+	desired := converter.ManifestToState(workspace)
 
 	actual, err := queryTmuxState(client)
 	if err != nil {
@@ -92,7 +93,7 @@ func buildPlan(client tmux.Client, workspace *manifest.Workspace) (*plan.Plan, e
 	}
 
 	diff := state.Compare(desired, actual)
-	planDiff := stateDiffToPlanDiff(diff, desired)
+	planDiff := converter.StateDiffToPlanDiff(diff, desired)
 
 	strategy := selectStrategy(actual.PaneBaseIndex)
 	return strategy.Plan(planDiff), nil
@@ -125,7 +126,7 @@ func executePlan(client tmux.Client, p *plan.Plan, workspace *manifest.Workspace
 
 func printDryRun(p *plan.Plan) {
 	logger.Info("Dry run - actions to execute:")
-	tmuxActions := planActionsToTmuxActions(p.Actions)
+	tmuxActions := converter.PlanActionsToTmux(p.Actions)
 	for _, action := range tmuxActions {
 		args := action.Args()
 		logger.Plain("  tmux %s", strings.Join(args, " "))
@@ -133,7 +134,7 @@ func printDryRun(p *plan.Plan) {
 }
 
 func executeActions(client tmux.Client, p *plan.Plan, workspace *manifest.Workspace, workspacePath string) error {
-	actions := planActionsToTmuxActions(p.Actions)
+	actions := converter.PlanActionsToTmux(p.Actions)
 
 	absPath, err := filepath.Abs(workspacePath)
 	if err != nil {
@@ -171,29 +172,6 @@ func attachToSession(client tmux.Client, workspace *manifest.Workspace) error {
 	return nil
 }
 
-func manifestToState(ws *manifest.Workspace) *state.State {
-	s := state.NewState()
-	for sessionName, windows := range ws.Sessions {
-		session := s.AddSession(sessionName)
-		for i, w := range windows {
-			session.Windows = append(session.Windows, manifestWindowToState(w, i))
-		}
-	}
-	return s
-}
-
-func manifestWindowToState(w manifest.Window, index int) *state.Window {
-	name := w.Name
-	if name == "" {
-		name = fmt.Sprintf("window-%d", index)
-	}
-	window := &state.Window{Name: name, Path: w.Path, Layout: w.Layout}
-	for _, p := range w.Panes {
-		window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command, Zoom: p.Zoom})
-	}
-	return window
-}
-
 func queryTmuxState(client tmux.Client) (*state.State, error) {
 	result, err := tmux.RunQuery(client, tmux.LoadStateQuery{})
 	if err != nil {
@@ -206,111 +184,8 @@ func queryTmuxState(client tmux.Client) (*state.State, error) {
 	for _, sess := range result.Sessions {
 		session := s.AddSession(sess.Name)
 		for _, w := range sess.Windows {
-			session.Windows = append(session.Windows, tmuxWindowToState(w))
+			session.Windows = append(session.Windows, converter.TmuxWindowToState(w))
 		}
 	}
 	return s, nil
-}
-
-func tmuxWindowToState(w tmux.Window) *state.Window {
-	window := &state.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
-	for _, p := range w.Panes {
-		window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
-	}
-	return window
-}
-
-func stateDiffToPlanDiff(sd state.Diff, desired *state.State) plan.Diff {
-	pd := plan.Diff{
-		Windows: make(map[string]plan.ItemDiff[plan.Window]),
-	}
-
-	pd.Sessions.Missing = convertMissingSessions(sd.Sessions.Missing, desired)
-	pd.Sessions.Extra = convertExtraSessions(sd.Sessions.Extra)
-
-	for sessionName, wd := range sd.Windows {
-		pd.Windows[sessionName] = convertWindowDiff(wd)
-	}
-
-	return pd
-}
-
-func convertMissingSessions(names []string, desired *state.State) []plan.Session {
-	sessions := make([]plan.Session, 0, len(names))
-	for _, name := range names {
-		session := desired.Sessions[name]
-		ps := plan.Session{Name: name}
-		for _, w := range session.Windows {
-			ps.Windows = append(ps.Windows, stateWindowToPlan(w))
-		}
-		sessions = append(sessions, ps)
-	}
-	return sessions
-}
-
-func convertExtraSessions(names []string) []plan.Session {
-	sessions := make([]plan.Session, 0, len(names))
-	for _, name := range names {
-		sessions = append(sessions, plan.Session{Name: name})
-	}
-	return sessions
-}
-
-func convertWindowDiff(wd state.ItemDiff[state.Window]) plan.ItemDiff[plan.Window] {
-	pwd := plan.ItemDiff[plan.Window]{}
-
-	for _, w := range wd.Missing {
-		pwd.Missing = append(pwd.Missing, stateWindowToPlan(&w))
-	}
-	for _, w := range wd.Extra {
-		pwd.Extra = append(pwd.Extra, plan.Window{Name: w.Name, Path: w.Path})
-	}
-	for _, m := range wd.Mismatched {
-		pwd.Mismatched = append(pwd.Mismatched, plan.Mismatch[plan.Window]{
-			Desired: stateWindowToPlan(&m.Desired),
-			Actual:  stateWindowToPlan(&m.Actual),
-		})
-	}
-	return pwd
-}
-
-func stateWindowToPlan(w *state.Window) plan.Window {
-	pw := plan.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
-	for _, p := range w.Panes {
-		pw.Panes = append(pw.Panes, plan.Pane{Path: p.Path, Command: p.Command, Zoom: p.Zoom})
-	}
-	return pw
-}
-
-func planActionsToTmuxActions(actions []plan.Action) []tmux.Action {
-	result := make([]tmux.Action, 0, len(actions))
-	for _, a := range actions {
-		if ta := planActionToTmuxAction(a); ta != nil {
-			result = append(result, ta)
-		}
-	}
-	return result
-}
-
-func planActionToTmuxAction(a plan.Action) tmux.Action {
-	switch action := a.(type) {
-	case plan.CreateSessionAction:
-		return tmux.CreateSession{Name: action.Name, WindowName: action.WindowName, Path: action.Path}
-	case plan.CreateWindowAction:
-		return tmux.CreateWindow{Session: action.Session, Name: action.Name, Path: action.Path}
-	case plan.SplitPaneAction:
-		return tmux.SplitPane{Target: action.Target, Path: action.Path}
-	case plan.SendKeysAction:
-		return tmux.SendKeys{Target: action.Target, Keys: action.Command}
-	case plan.SelectLayoutAction:
-		return tmux.SelectLayout{Target: action.Target, Layout: action.Layout}
-	case plan.ZoomPaneAction:
-		return tmux.ZoomPane{Target: action.Target}
-	case plan.KillSessionAction:
-		return tmux.KillSession{Name: action.Name}
-	case plan.KillWindowAction:
-		return tmux.KillWindow{Target: action.Target}
-	default:
-		return nil
-	}
 }

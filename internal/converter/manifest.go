@@ -1,0 +1,40 @@
+package converter
+
+import (
+	"fmt"
+
+	"github.com/MSmaili/tms/internal/manifest"
+	"github.com/MSmaili/tms/internal/state"
+	"github.com/MSmaili/tms/internal/tmux"
+)
+
+func ManifestToState(ws *manifest.Workspace) *state.State {
+	s := state.NewState()
+	for sessionName, windows := range ws.Sessions {
+		session := s.AddSession(sessionName)
+		for i, w := range windows {
+			session.Windows = append(session.Windows, manifestWindowToState(w, i))
+		}
+	}
+	return s
+}
+
+func manifestWindowToState(w manifest.Window, index int) *state.Window {
+	name := w.Name
+	if name == "" {
+		name = fmt.Sprintf("window-%d", index)
+	}
+	window := &state.Window{Name: name, Path: w.Path, Layout: w.Layout}
+	for _, p := range w.Panes {
+		window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command, Zoom: p.Zoom})
+	}
+	return window
+}
+
+func TmuxWindowToState(w tmux.Window) *state.Window {
+	window := &state.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
+	for _, p := range w.Panes {
+		window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
+	}
+	return window
+}
