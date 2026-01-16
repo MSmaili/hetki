@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-)
 
-//todo: what about panes?
+	"gopkg.in/yaml.v3"
+)
 
 type Loader interface {
 	Load() (*Config, error)
@@ -30,8 +30,19 @@ func (l *FileLoader) Load() (*Config, error) {
 	}
 
 	var raw Config
-	if err = json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
+	ext := filepath.Ext(extendedPath)
+	
+	switch ext {
+	case ".yaml", ".yml":
+		if err = yaml.Unmarshal(data, &raw); err != nil {
+			return nil, fmt.Errorf("parse yaml config: %w", err)
+		}
+	case ".json":
+		if err = json.Unmarshal(data, &raw); err != nil {
+			return nil, fmt.Errorf("parse json config: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported config format: %s (use .yaml, .yml, or .json)", ext)
 	}
 
 	if err = validate(&raw); err != nil {
@@ -44,7 +55,6 @@ func (l *FileLoader) Load() (*Config, error) {
 	}
 
 	return normalized, nil
-
 }
 
 func validate(cfg *Config) error {
