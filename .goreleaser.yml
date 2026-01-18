@@ -1,0 +1,52 @@
+project_name: tms
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: tms
+    main: .
+    binary: tms
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/MSmaili/tms/cmd.Version={{.Version}}
+      - -X github.com/MSmaili/tms/cmd.GitCommit={{.ShortCommit}}
+      - -X github.com/MSmaili/tms/cmd.BuildDate={{.Date}}
+
+archives:
+  - id: tms
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}-
+      {{- .Os }}-
+      {{- .Arch }}
+    files:
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  github:
+    owner: MSmaili
+    name: tms
+  draft: false
+  prerelease: auto
