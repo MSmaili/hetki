@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,13 +13,13 @@ import (
 )
 
 const (
-	modulePath         = "github.com/MSmaili/muxie@latest"
-	installScriptURL   = "https://raw.githubusercontent.com/MSmaili/muxie/main/install.sh"
-	muxieFromSourceEnv = "MUXIE_FROM_SOURCE=1"
+	modulePath       = "github.com/MSmaili/muxie@latest"
+	modulePathSource = "github.com/MSmaili/muxie@main"
 )
 
 var (
 	updateFromSource bool
+	updateDryRun     bool
 )
 
 var updateCmd = &cobra.Command{
@@ -30,48 +31,95 @@ var updateCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(updateCmd)
 	updateCmd.Flags().BoolVar(&updateFromSource, "source", false, "Build from source instead of using release")
+	updateCmd.Flags().BoolVar(&updateDryRun, "dry-run", false, "Show what would be done without updating")
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
-	logger.Info("Updating muxie...")
-
-	if updateFromSource {
-		logger.Debug("Forcing update from source")
-		return updateViaGo()
-	}
-
 	exePath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("failed to determine executable path: %w", err)
+		return fmt.Errorf("failed to resolve executable path: %w", err)
 	}
 
-	if isGoInstall(exePath) {
-		logger.Debug("Detected Go-based installation", "path", exePath)
-		return updateViaGo()
+	updater, err := determineUpdater(exePath)
+	if err != nil {
+		return err
 	}
 
-	logger.Debug("Detected script-based installation", "path", exePath)
-	return updateViaScript()
+	logger.Info("Detected installation method", "method", updater.Name())
+
+	if updateDryRun {
+		updater.DryRun()
+		return nil
+	}
+
+	if err := updater.Update(); err != nil {
+		return fmt.Errorf("update failed: %w", err)
+	}
+
+	logger.Success("Update completed successfully")
+	return nil
 }
 
-func isGoInstall(exePath string) bool {
-	exePath = filepath.Clean(exePath)
+type Updater interface {
+	Name() string
+	Update() error
+	DryRun()
+}
 
-	var binDirs []string
-
-	if gobin := os.Getenv("GOBIN"); gobin != "" {
-		binDirs = append(binDirs, gobin)
+func determineUpdater(exePath string) (Updater, error) {
+	if installedViaGo(exePath) {
+		return &GoUpdater{}, nil
 	}
 
-	if gopath := os.Getenv("GOPATH"); gopath != "" {
-		for _, p := range filepath.SplitList(gopath) {
-			binDirs = append(binDirs, filepath.Join(p, "bin"))
+	return nil, errors.New(
+		"muxie was not installed via `go install`; updates for script installs are not supported yet",
+	)
+}
+
+type GoUpdater struct{}
+
+func (g *GoUpdater) Name() string { return "go install" }
+
+func (g *GoUpdater) DryRun() {
+	module := modulePath
+	if updateFromSource {
+		module = modulePathSource
+	}
+
+	logger.Info("Dry run", "command", "go install "+module)
+}
+
+func (g *GoUpdater) Update() error {
+	if _, err := exec.LookPath("go"); err != nil {
+		return errors.New("go binary not found in PATH")
+	}
+
+	module := modulePath
+	if updateFromSource {
+		module = modulePathSource
+	}
+
+	cmd := exec.Command("go", "install", module)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	logger.Info("Running", "command", strings.Join(cmd.Args, " "))
+	return cmd.Run()
+}
+
+func installedViaGo(exePath string) bool {
+	exeReal, err := filepath.EvalSymlinks(exePath)
+	if err != nil {
+		return false
+	}
+
+	for _, dir := range goBinDirs() {
+		dirReal, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			continue
 		}
-	}
 
-	for _, dir := range binDirs {
-		dir = filepath.Clean(dir) + string(os.PathSeparator)
-		if strings.HasPrefix(exePath, dir) {
+		if isWithinDir(exeReal, dirReal) {
 			return true
 		}
 	}
@@ -79,40 +127,29 @@ func isGoInstall(exePath string) bool {
 	return false
 }
 
-func updateViaGo() error {
-	logger.Info("Updating via go install...")
+func goBinDirs() []string {
+	var dirs []string
 
-	if _, err := exec.LookPath("go"); err != nil {
-		return fmt.Errorf("go binary not found in PATH")
+	if gobin := os.Getenv("GOBIN"); gobin != "" {
+		dirs = append(dirs, gobin)
 	}
 
-	if err := runCommand("go", "install", modulePath); err != nil {
-		return fmt.Errorf("go install failed: %w", err)
+	if gopath := os.Getenv("GOPATH"); gopath != "" {
+		for _, p := range filepath.SplitList(gopath) {
+			dirs = append(dirs, filepath.Join(p, "bin"))
+		}
 	}
 
-	logger.Success("Updated successfully via go install")
-	return nil
+	if len(dirs) == 0 {
+		if home, err := os.UserHomeDir(); err == nil {
+			dirs = append(dirs, filepath.Join(home, "go", "bin"))
+		}
+	}
+
+	return dirs
 }
 
-func updateViaScript() error {
-	logger.Info("Updating via install script...")
-
-	scriptCmd := fmt.Sprintf("curl -fsSL %s | bash", installScriptURL)
-	if updateFromSource {
-		scriptCmd = fmt.Sprintf("curl -fsSL %s | %s bash", installScriptURL, muxieFromSourceEnv)
-	}
-
-	if err := runCommand("bash", "-c", scriptCmd); err != nil {
-		return fmt.Errorf("script update failed: %w", err)
-	}
-
-	logger.Success("Updated successfully via install script")
-	return nil
-}
-
-func runCommand(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+func isWithinDir(file, dir string) bool {
+	rel, err := filepath.Rel(dir, file)
+	return err == nil && !strings.HasPrefix(rel, "..")
 }
