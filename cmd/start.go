@@ -5,16 +5,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MSmaili/tms/internal/converter"
-	"github.com/MSmaili/tms/internal/logger"
-	"github.com/MSmaili/tms/internal/manifest"
-	"github.com/MSmaili/tms/internal/plan"
-	"github.com/MSmaili/tms/internal/state"
-	"github.com/MSmaili/tms/internal/tmux"
+	"github.com/MSmaili/muxie/internal/converter"
+	"github.com/MSmaili/muxie/internal/logger"
+	"github.com/MSmaili/muxie/internal/manifest"
+	"github.com/MSmaili/muxie/internal/plan"
+	"github.com/MSmaili/muxie/internal/state"
+	"github.com/MSmaili/muxie/internal/tmux"
 	"github.com/spf13/cobra"
 )
 
-const tmsWorkspacePathEnv = "TMS_WORKSPACE_PATH"
+const muxieWorkspacePathEnv = "MUXIE_WORKSPACE_PATH"
 
 var (
 	dryRun bool
@@ -158,7 +158,7 @@ func buildSetEnvActions(sessionNames []string, path string) []tmux.Action {
 	for _, name := range sessionNames {
 		actions = append(actions, tmux.SetEnvironment{
 			Session: name,
-			Name:    tmsWorkspacePathEnv,
+			Name:    muxieWorkspacePathEnv,
 			Value:   path,
 		})
 	}

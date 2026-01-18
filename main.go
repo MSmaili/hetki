@@ -1,6 +1,6 @@
 package main
 
-import "github.com/MSmaili/tms/cmd"
+import "github.com/MSmaili/muxie/cmd"
 
 func main() {
 	cmd.Execute()

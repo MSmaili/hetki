@@ -12,7 +12,7 @@ func TestLoadStateQuery(t *testing.T) {
 	t.Run("args", func(t *testing.T) {
 		expected := []string{
 			"list-panes", "-a", "-F",
-			"#{session_id}|#{session_name}|#{window_name}|#{pane_current_path}|#{pane_current_command}|#{TMS_WORKSPACE_PATH}",
+			"#{session_id}|#{session_name}|#{window_name}|#{pane_current_path}|#{pane_current_command}|#{MUXIE_WORKSPACE_PATH}",
 			";", "show-options", "-gv", "pane-base-index",
 		}
 		assert.Equal(t, expected, q.Args())

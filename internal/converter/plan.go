@@ -1,8 +1,8 @@
 package converter
 
 import (
-	"github.com/MSmaili/tms/internal/plan"
-	"github.com/MSmaili/tms/internal/tmux"
+	"github.com/MSmaili/muxie/internal/plan"
+	"github.com/MSmaili/muxie/internal/tmux"
 )
 
 func PlanActionsToTmux(actions []plan.Action) []tmux.Action {

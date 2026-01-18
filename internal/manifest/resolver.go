@@ -49,7 +49,7 @@ func (r *Resolver) LocalPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("getting current directory: %w", err)
 	}
-	return filepath.Join(cwd, ".tms"+DefaultExt), nil
+	return filepath.Join(cwd, ".muxie"+DefaultExt), nil
 }
 
 func hasValidExt(name string) bool {
@@ -87,7 +87,7 @@ func (r *Resolver) findNamedWorkspace(name string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("named workspace not found: %s\nHint: List available workspaces with 'tms list' or create one with 'tms save -n %s'", name, name)
+	return "", fmt.Errorf("named workspace not found: %s\nHint: List available workspaces with 'muxie list' or create one with 'muxie save -n %s'", name, name)
 }
 
 func (r *Resolver) findLocalWorkspace() (string, error) {
@@ -97,11 +97,11 @@ func (r *Resolver) findLocalWorkspace() (string, error) {
 	}
 
 	for _, ext := range []string{".yaml", ".yml", ".json"} {
-		path := filepath.Join(cwd, ".tms"+ext)
+		path := filepath.Join(cwd, ".muxie"+ext)
 		if _, err := os.Stat(path); err == nil {
 			return path, nil
 		}
 	}
 
-	return "", fmt.Errorf("no local workspace found (.tms.{yaml,yml,json})\nHint: Create one with 'tms save .' or specify a workspace name")
+	return "", fmt.Errorf("no local workspace found (.muxie.{yaml,yml,json})\nHint: Create one with 'muxie save .' or specify a workspace name")
 }

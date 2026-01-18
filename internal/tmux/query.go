@@ -28,7 +28,7 @@ type LoadStateQuery struct{}
 func (q LoadStateQuery) Args() []string {
 	return []string{
 		"list-panes", "-a",
-		"-F", "#{session_id}|#{session_name}|#{window_name}|#{pane_current_path}|#{pane_current_command}|#{TMS_WORKSPACE_PATH}",
+		"-F", "#{session_id}|#{session_name}|#{window_name}|#{pane_current_path}|#{pane_current_command}|#{MUXIE_WORKSPACE_PATH}",
 		";", "show-options", "-gv", "pane-base-index",
 	}
 }

@@ -3,9 +3,9 @@ package converter
 import (
 	"fmt"
 
-	"github.com/MSmaili/tms/internal/manifest"
-	"github.com/MSmaili/tms/internal/state"
-	"github.com/MSmaili/tms/internal/tmux"
+	"github.com/MSmaili/muxie/internal/manifest"
+	"github.com/MSmaili/muxie/internal/state"
+	"github.com/MSmaili/muxie/internal/tmux"
 )
 
 func ManifestToState(ws *manifest.Workspace) *state.State {

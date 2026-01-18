@@ -7,13 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MSmaili/tms/internal/logger"
+	"github.com/MSmaili/muxie/internal/logger"
 	"github.com/spf13/cobra"
 )
 
 const (
-	modulePath       = "github.com/MSmaili/tms@latest"
-	installScriptURL = "https://raw.githubusercontent.com/MSmaili/tms/main/install.sh"
+	modulePath         = "github.com/MSmaili/muxie@latest"
+	installScriptURL   = "https://raw.githubusercontent.com/MSmaili/muxie/main/install.sh"
+	muxieFromSourceEnv = "MUXIE_FROM_SOURCE=1"
 )
 
 var (
@@ -22,7 +23,7 @@ var (
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Update tms to the latest version",
+	Short: "Update muxie to the latest version",
 	RunE:  runUpdate,
 }
 
@@ -32,7 +33,7 @@ func init() {
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
-	logger.Info("Updating tms...")
+	logger.Info("Updating muxie...")
 
 	if updateFromSource {
 		logger.Debug("Forcing update from source")
@@ -98,7 +99,7 @@ func updateViaScript() error {
 
 	scriptCmd := fmt.Sprintf("curl -fsSL %s | bash", installScriptURL)
 	if updateFromSource {
-		scriptCmd = fmt.Sprintf("curl -fsSL %s | TMS_FROM_SOURCE=1 bash", installScriptURL)
+		scriptCmd = fmt.Sprintf("curl -fsSL %s | %s bash", installScriptURL, muxieFromSourceEnv)
 	}
 
 	if err := runCommand("bash", "-c", scriptCmd); err != nil {

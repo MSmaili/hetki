@@ -1,12 +1,12 @@
 #!/bin/bash
 set -e
 
-# TMS installer script
-# Usage: curl -fsSL https://raw.githubusercontent.com/MSmaili/tms/main/install.sh | bash
+# muxie installer script
+# Usage: curl -fsSL https://raw.githubusercontent.com/MSmaili/muxie/main/install.sh | bash
 
-VERSION="${TMS_VERSION:-latest}"
-INSTALL_DIR="${TMS_INSTALL_DIR:-/usr/local/bin}"
-REPO="MSmaili/tms"
+VERSION="${MUXIE_VERSION:-latest}"
+INSTALL_DIR="${MUXIE_INSTALL_DIR:-/usr/local/bin}"
+REPO="MSmaili/muxie"
 
 # Colors
 RED='\033[0;31m'
@@ -69,22 +69,22 @@ install_from_source() {
 
     cd "$TEMP_DIR"
 
-    info "Building tms..."
-    go build -o tms . || error "Build failed"
+    info "Building muxie..."
+    go build -o muxie . || error "Build failed"
 
     info "Installing to $INSTALL_DIR..."
-    sudo mv tms "$INSTALL_DIR/tms" || error "Failed to install (try with sudo)"
-    sudo chmod +x "$INSTALL_DIR/tms"
+    sudo mv muxie "$INSTALL_DIR/muxie" || error "Failed to install (try with sudo)"
+    sudo chmod +x "$INSTALL_DIR/muxie"
 }
 
 # Install from GitHub releases
 install_from_release() {
-    info "Downloading tms $VERSION for $OS/$ARCH..."
+    info "Downloading muxie $VERSION for $OS/$ARCH..."
 
     if [ "$VERSION" = "latest" ]; then
-        DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/tms-$OS-$ARCH"
+        DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/muxie-$OS-$ARCH"
     else
-        DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/tms-$OS-$ARCH"
+        DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/muxie-$OS-$ARCH"
     fi
 
     TEMP_FILE=$(mktemp)
@@ -92,8 +92,8 @@ install_from_release() {
 
     if curl -fsSL "$DOWNLOAD_URL" -o "$TEMP_FILE" 2>/dev/null; then
         info "Installing to $INSTALL_DIR..."
-        sudo mv "$TEMP_FILE" "$INSTALL_DIR/tms" || error "Failed to install (try with sudo)"
-        sudo chmod +x "$INSTALL_DIR/tms"
+        sudo mv "$TEMP_FILE" "$INSTALL_DIR/muxie" || error "Failed to install (try with sudo)"
+        sudo chmod +x "$INSTALL_DIR/muxie"
     else
         warn "No pre-built binary found, installing from source..."
         install_from_source
@@ -103,7 +103,7 @@ install_from_release() {
 # Check if tmux is installed
 check_tmux() {
     if ! command -v tmux >/dev/null 2>&1; then
-        warn "tmux is not installed. TMS requires tmux to function."
+        warn "tmux is not installed. muxie requires tmux to function."
         echo "Install tmux:"
         echo "  macOS:  brew install tmux"
         echo "  Ubuntu: sudo apt install tmux"
@@ -116,24 +116,24 @@ main() {
     check_tmux
 
     # Check if forced to install from source
-    if [ -n "$TMS_FROM_SOURCE" ]; then
+    if [ -n "$MUXIE_FROM_SOURCE" ]; then
         install_from_source
     else
         install_from_release
     fi
 
     # Verify installation
-    if command -v tms >/dev/null 2>&1; then
-        info "Successfully installed tms!"
+    if command -v muxie >/dev/null 2>&1; then
+        info "Successfully installed muxie!"
         echo ""
-        tms --version
+        muxie --version
         echo ""
         echo "Get started:"
-        echo "  tms start <workspace>    # Start a workspace"
-        echo "  tms save                 # Save current session"
-        echo "  tms list sessions        # List tmux sessions"
+        echo "  muxie start <workspace>    # Start a workspace"
+        echo "  muxie save                 # Save current session"
+        echo "  muxie list sessions        # List tmux sessions"
         echo ""
-        echo "For more info: tms --help"
+        echo "For more info: muxie --help"
     else
         error "Installation failed"
     fi

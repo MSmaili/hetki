@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/MSmaili/tms/internal/logger"
-	"github.com/MSmaili/tms/internal/manifest"
-	"github.com/MSmaili/tms/internal/tmux"
+	"github.com/MSmaili/muxie/internal/logger"
+	"github.com/MSmaili/muxie/internal/manifest"
+	"github.com/MSmaili/muxie/internal/tmux"
 	"github.com/spf13/cobra"
 )
 
@@ -61,7 +61,7 @@ func runSave(cmd *cobra.Command, args []string) error {
 
 func validateSaveFlags() error {
 	if savePath != "" && saveName != "" {
-		return fmt.Errorf("cannot use both -p and -n flags\nUse either: tms save -p <path> OR tms save -n <name>")
+		return fmt.Errorf("cannot use both -p and -n flags\nUse either: muxie save -p <path> OR muxie save -n <name>")
 	}
 	return nil
 }
@@ -113,14 +113,14 @@ func determineSavePath(args []string, existingPath string) (string, error) {
 	}
 
 	if saveAll {
-		return "", fmt.Errorf("--all requires a destination\nUse: tms save --all -p <path>, tms save --all -n <name>, or tms save --all .")
+		return "", fmt.Errorf("--all requires a destination\nUse: muxie save --all -p <path>, muxie save --all -n <name>, or muxie save --all .")
 	}
 
 	if existingPath != "" {
 		return existingPath, nil
 	}
 
-	return "", fmt.Errorf("no workspace path found\nHint: This session wasn't started by tms. Use -p <path>, -n <name>, or . to specify where to save")
+	return "", fmt.Errorf("no workspace path found\nHint: This session wasn't started by muxie. Use -p <path>, -n <name>, or . to specify where to save")
 }
 
 func saveWorkspace(client tmux.Client, sessions []tmux.Session, outputPath string) error {

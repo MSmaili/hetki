@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/MSmaili/tms/internal/logger"
+	"github.com/MSmaili/muxie/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -15,9 +15,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "tms",
-	Short: "TMS - Tmux Session Manager",
-	Long: `TMS is a powerful tmux session manager that helps you manage complex tmux sessions with ease.
+	Use:   "muxie",
+	Short: "muxie - Tmux Session Manager",
+	Long: `muxie is a powerful tmux session manager that helps you manage complex tmux sessions with ease.
 
 It supports:
 - Multiple sessions and windows with panes
@@ -28,7 +28,7 @@ It supports:
 }
 
 func init() {
-	rootCmd.SetVersionTemplate(fmt.Sprintf("tms version %s\ncommit: %s\nbuilt: %s\n", Version, GitCommit, BuildDate))
+	rootCmd.SetVersionTemplate(fmt.Sprintf("muxie version %s\ncommit: %s\nbuilt: %s\n", Version, GitCommit, BuildDate))
 }
 
 func Execute() {

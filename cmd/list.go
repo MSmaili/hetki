@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/MSmaili/tms/internal/manifest"
-	"github.com/MSmaili/tms/internal/tmux"
+	"github.com/MSmaili/muxie/internal/manifest"
+	"github.com/MSmaili/muxie/internal/tmux"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -25,10 +25,10 @@ var listCmd = &cobra.Command{
 	Long: `List workspace files or running tmux sessions.
 
 Examples:
-  tms list                              # List workspace names
-  tms list workspaces --sessions        # workspace:session
-  tms list sessions --windows --format=tree  # Pretty tree view
-  tms list sessions --windows --format=json  # JSON output`,
+  muxie list                              # List workspace names
+  muxie list workspaces --sessions        # workspace:session
+  muxie list sessions --windows --format=tree  # Pretty tree view
+  muxie list sessions --windows --format=json  # JSON output`,
 	RunE: runList,
 }
 
@@ -95,18 +95,18 @@ func runList(cmd *cobra.Command, args []string) error {
 func validateListFlags(mode string) error {
 	validFormats := map[string]bool{"flat": true, "indent": true, "tree": true, "json": true}
 	if !validFormats[listFormat] {
-		return fmt.Errorf("invalid format %q\nValid formats: flat, indent, tree, json\nExample: tms list --format=tree", listFormat)
+		return fmt.Errorf("invalid format %q\nValid formats: flat, indent, tree, json\nExample: muxie list --format=tree", listFormat)
 	}
 	if mode == "workspaces" {
 		if listWindows && !listSessions {
-			return fmt.Errorf("--windows requires --sessions\nExample: tms list workspaces --sessions --windows")
+			return fmt.Errorf("--windows requires --sessions\nExample: muxie list workspaces --sessions --windows")
 		}
 		if listCurrent {
-			return fmt.Errorf("--current only works with sessions\nExample: tms list sessions --current")
+			return fmt.Errorf("--current only works with sessions\nExample: muxie list sessions --current")
 		}
 	}
 	if listPanes && !listWindows {
-		return fmt.Errorf("--panes requires --windows\nExample: tms list sessions --windows --panes")
+		return fmt.Errorf("--panes requires --windows\nExample: muxie list sessions --windows --panes")
 	}
 	return nil
 }
