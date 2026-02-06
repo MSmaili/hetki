@@ -18,6 +18,9 @@ func TestLoadStateQuery(t *testing.T) {
 		assert.Equal(t, expected, q.Args())
 	})
 
+	// Ensure tests don't depend on the real tmux environment
+	t.Setenv("TMUX", "")
+
 	tests := []struct {
 		name   string
 		output string

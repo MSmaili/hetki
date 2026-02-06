@@ -44,6 +44,8 @@ func (m *MockClient) Attach(session string) error {
 }
 
 func TestRunQuery(t *testing.T) {
+	t.Setenv("TMUX", "")
+
 	tests := []struct {
 		name    string
 		output  string
