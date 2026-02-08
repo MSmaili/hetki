@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MSmaili/muxie/internal/logger"
+	"github.com/MSmaili/hetki/internal/logger"
 	"github.com/spf13/cobra"
 )
 
 const (
-	modulePath       = "github.com/MSmaili/muxie@latest"
-	modulePathSource = "github.com/MSmaili/muxie@main"
+	modulePath       = "github.com/MSmaili/hetki@latest"
+	modulePathSource = "github.com/MSmaili/hetki@main"
 )
 
 var (
@@ -25,7 +25,7 @@ var (
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Update muxie to the latest version",
+	Short: "Update hetki to the latest version",
 	RunE:  runUpdate,
 }
 
@@ -77,7 +77,7 @@ func determineUpdater(exePath string) (Updater, error) {
 	}
 
 	return nil, errors.New(
-		"muxie was not installed via `go install`; updates for script installs are not supported yet",
+		"hetki was not installed via `go install`; updates for script installs are not supported yet",
 	)
 }
 
@@ -107,7 +107,7 @@ func (g *GoUpdater) Update() error {
 		logger.Debug("Installing release: %s", module)
 	}
 
-	logger.Info("Updating muxie...")
+	logger.Info("Updating hetki...")
 
 	args := []string{"install"}
 	if updateVerbose {

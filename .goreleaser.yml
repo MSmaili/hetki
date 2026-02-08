@@ -1,13 +1,13 @@
-project_name: muxie
+project_name: hetki
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: muxie
+  - id: hetki
     main: .
-    binary: muxie
+    binary: hetki
     env:
       - CGO_ENABLED=0
     goos:
@@ -18,12 +18,12 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/MSmaili/muxie/cmd.Version={{.Version}}
-      - -X github.com/MSmaili/muxie/cmd.GitCommit={{.ShortCommit}}
-      - -X github.com/MSmaili/muxie/cmd.BuildDate={{.Date}}
+      - -X github.com/MSmaili/hetki/cmd.Version={{.Version}}
+      - -X github.com/MSmaili/hetki/cmd.GitCommit={{.ShortCommit}}
+      - -X github.com/MSmaili/hetki/cmd.BuildDate={{.Date}}
 
 archives:
-  - id: muxie
+  - id: hetki
     format: tar.gz
     name_template: >-
       {{ .ProjectName }}-
@@ -47,6 +47,6 @@ changelog:
 release:
   github:
     owner: MSmaili
-    name: muxie
+    name: hetki
   draft: false
   prerelease: auto

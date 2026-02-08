@@ -1,4 +1,4 @@
-module github.com/MSmaili/muxie
+module github.com/MSmaili/hetki
 
 go 1.25.3
 
