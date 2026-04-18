@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/MSmaili/hetki/internal/backend"
-	"github.com/MSmaili/hetki/internal/plan"
 )
 
 type TmuxBackend struct {
@@ -165,23 +164,23 @@ func (b *TmuxBackend) mapActions(actions []backend.Action) []Action {
 func (b *TmuxBackend) mapAction(a backend.Action, windowIndex map[string]int) Action {
 	base := b.windowBaseIndex
 	switch action := a.(type) {
-	case plan.CreateSessionAction:
+	case backend.CreateSessionAction:
 		windowIndex[action.Name] = base
 		return CreateSession{Name: action.Name, WindowName: action.WindowName, Path: action.Path}
-	case plan.CreateWindowAction:
+	case backend.CreateWindowAction:
 		windowIndex[action.Session]++
 		return CreateWindow{Session: action.Session, Name: action.Name, Path: action.Path}
-	case plan.SplitPaneAction:
+	case backend.SplitPaneAction:
 		return SplitPane{Target: fmt.Sprintf("%s:%d", action.Session, windowIndex[action.Session]), Path: action.Path}
-	case plan.SendKeysAction:
+	case backend.SendKeysAction:
 		return SendKeys{Target: fmt.Sprintf("%s:%d.%d", action.Session, windowIndex[action.Session], action.Pane+b.paneBaseIndex), Keys: action.Command}
-	case plan.SelectLayoutAction:
+	case backend.SelectLayoutAction:
 		return SelectLayout{Target: fmt.Sprintf("%s:%d", action.Session, windowIndex[action.Session]), Layout: action.Layout}
-	case plan.ZoomPaneAction:
+	case backend.ZoomPaneAction:
 		return ZoomPane{Target: fmt.Sprintf("%s:%d.%d", action.Session, windowIndex[action.Session], action.Pane+b.paneBaseIndex)}
-	case plan.KillSessionAction:
+	case backend.KillSessionAction:
 		return KillSession{Name: action.Name}
-	case plan.KillWindowAction:
+	case backend.KillWindowAction:
 		return KillWindow{Target: fmt.Sprintf("%s:%s", action.Session, action.Window)}
 	default:
 		return nil

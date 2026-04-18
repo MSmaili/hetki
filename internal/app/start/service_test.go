@@ -9,6 +9,7 @@ import (
 
 	"github.com/MSmaili/hetki/internal/backend"
 	"github.com/MSmaili/hetki/internal/logger"
+	"github.com/MSmaili/hetki/internal/plan"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,6 +24,7 @@ type stubBackend struct {
 	applyCalls  int
 	attachCalls int
 	dryRunCalls int
+	lastActions []backend.Action
 }
 
 func (s *stubBackend) Name() string { return "stub" }
@@ -36,11 +38,13 @@ func (s *stubBackend) QueryState() (backend.StateResult, error) {
 
 func (s *stubBackend) Apply(actions []backend.Action) error {
 	s.applyCalls++
+	s.lastActions = append([]backend.Action(nil), actions...)
 	return s.applyErr
 }
 
 func (s *stubBackend) DryRun(actions []backend.Action) []string {
 	s.dryRunCalls++
+	s.lastActions = append([]backend.Action(nil), actions...)
 	return append([]string(nil), s.dryRunLines...)
 }
 
@@ -75,6 +79,9 @@ func TestServiceRunDryRunOutputsPlan(t *testing.T) {
 	assert.Equal(t, 1, stub.dryRunCalls)
 	assert.Zero(t, stub.applyCalls)
 	assert.Zero(t, stub.attachCalls)
+	if assert.Len(t, stub.lastActions, 1) {
+		assert.IsType(t, backend.CreateSessionAction{}, stub.lastActions[0])
+	}
 }
 
 func TestServiceRunFailsWhenBackendStateQueryFails(t *testing.T) {
@@ -98,6 +105,30 @@ func TestServiceRunFailsWhenBackendStateQueryFails(t *testing.T) {
 	assert.ErrorContains(t, err, "muxie list sessions")
 	assert.Zero(t, stub.dryRunCalls)
 	assert.Zero(t, stub.applyCalls)
+}
+
+func TestToBackendActionsMapsPlannerActions(t *testing.T) {
+	actions := []plan.Action{
+		plan.CreateSessionAction{Name: "dev", WindowName: "editor", Path: "~/code"},
+		plan.CreateWindowAction{Session: "dev", Name: "server", Path: "~/api"},
+		plan.SplitPaneAction{Session: "dev", Window: "server", Path: "~/api"},
+		plan.SendKeysAction{Session: "dev", Window: "server", Pane: 1, Command: "npm test"},
+		plan.SelectLayoutAction{Session: "dev", Window: "server", Layout: "tiled"},
+		plan.ZoomPaneAction{Session: "dev", Window: "server", Pane: 1},
+		plan.KillSessionAction{Name: "old"},
+		plan.KillWindowAction{Session: "dev", Window: "old-window"},
+	}
+
+	assert.Equal(t, []backend.Action{
+		backend.CreateSessionAction{Name: "dev", WindowName: "editor", Path: "~/code"},
+		backend.CreateWindowAction{Session: "dev", Name: "server", Path: "~/api"},
+		backend.SplitPaneAction{Session: "dev", Window: "server", Path: "~/api"},
+		backend.SendKeysAction{Session: "dev", Window: "server", Pane: 1, Command: "npm test"},
+		backend.SelectLayoutAction{Session: "dev", Window: "server", Layout: "tiled"},
+		backend.ZoomPaneAction{Session: "dev", Window: "server", Pane: 1},
+		backend.KillSessionAction{Name: "old"},
+		backend.KillWindowAction{Session: "dev", Window: "old-window"},
+	}, toBackendActions(actions))
 }
 
 func captureLoggerOutput(t *testing.T, fn func()) string {

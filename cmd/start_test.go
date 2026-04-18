@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/MSmaili/hetki/internal/plan"
+	"github.com/MSmaili/hetki/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +39,7 @@ func TestRunStartDryRunOutputsPlan(t *testing.T) {
 	assert.Zero(t, stub.applyCalls)
 	assert.Zero(t, stub.attachCalls)
 	if assert.Len(t, stub.lastActions, 1) {
-		assert.IsType(t, plan.CreateSessionAction{}, stub.lastActions[0])
+		assert.IsType(t, backend.CreateSessionAction{}, stub.lastActions[0])
 	}
 }
 

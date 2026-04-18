@@ -127,9 +127,32 @@ func printDryRun(b backend.Backend, p *plan.Plan) {
 func toBackendActions(actions []plan.Action) []backend.Action {
 	result := make([]backend.Action, len(actions))
 	for i, a := range actions {
-		result[i] = a
+		result[i] = toBackendAction(a)
 	}
 	return result
+}
+
+func toBackendAction(action plan.Action) backend.Action {
+	switch a := action.(type) {
+	case plan.CreateSessionAction:
+		return backend.CreateSessionAction{Name: a.Name, WindowName: a.WindowName, Path: a.Path}
+	case plan.CreateWindowAction:
+		return backend.CreateWindowAction{Session: a.Session, Name: a.Name, Path: a.Path}
+	case plan.SplitPaneAction:
+		return backend.SplitPaneAction{Session: a.Session, Window: a.Window, Path: a.Path}
+	case plan.SendKeysAction:
+		return backend.SendKeysAction{Session: a.Session, Window: a.Window, Pane: a.Pane, Command: a.Command}
+	case plan.KillSessionAction:
+		return backend.KillSessionAction{Name: a.Name}
+	case plan.KillWindowAction:
+		return backend.KillWindowAction{Session: a.Session, Window: a.Window}
+	case plan.SelectLayoutAction:
+		return backend.SelectLayoutAction{Session: a.Session, Window: a.Window, Layout: a.Layout}
+	case plan.ZoomPaneAction:
+		return backend.ZoomPaneAction{Session: a.Session, Window: a.Window, Pane: a.Pane}
+	default:
+		return nil
+	}
 }
 
 func attachToSession(b backend.Backend, workspace *manifest.Workspace) error {
