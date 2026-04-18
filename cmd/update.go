@@ -36,7 +36,7 @@ var (
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Update hetki to the latest version",
+	Short: "Update muxie to the latest version",
 	RunE:  runUpdate,
 }
 
@@ -134,7 +134,7 @@ func determineUpdater(exePath string) (Updater, error) {
 	}
 
 	return nil, errors.New(
-		"hetki was not installed via `go install` or to ~/.local/bin or ~/bin; manual update required",
+		"muxie was not installed via `go install` or to ~/.local/bin or ~/bin; manual update required",
 	)
 }
 
@@ -179,7 +179,7 @@ func (g *GoUpdater) Update(_ string) error {
 		logger.Debug("Installing release: %s", module)
 	}
 
-	logger.Info("Updating hetki...")
+	logger.Info("Updating muxie...")
 
 	args := []string{"install"}
 	if updateVerbose {
@@ -227,7 +227,7 @@ func (b *BinaryUpdater) Update(latestVersion string) error {
 	downloadURL := fmt.Sprintf("%s%s/releases/download/%s/%s", githubReleaseURL, githubRepo, latestVersion, binaryName)
 	checksumsURL := fmt.Sprintf("%s%s/releases/download/%s/checksums.txt", githubReleaseURL, githubRepo, latestVersion)
 
-	logger.Info("Downloading hetki %s for %s/%s...", latestVersion, runtime.GOOS, runtime.GOARCH)
+	logger.Info("Downloading muxie %s for %s/%s...", latestVersion, runtime.GOOS, runtime.GOARCH)
 
 	tempFile, err := os.CreateTemp(filepath.Dir(b.exePath), "hetki-update-*")
 	if err != nil {

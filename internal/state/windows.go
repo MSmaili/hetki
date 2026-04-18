@@ -20,7 +20,6 @@ func compareWindows(diff *Diff, desired, actual *State) {
 }
 
 func compareSessionWindows(desired, actual []*Window) ItemDiff[Window] {
-	desiredMap := windowsByKey(desired)
 	actualMap := windowsByKey(actual)
 
 	windowDiff := ItemDiff[Window]{
@@ -29,7 +28,8 @@ func compareSessionWindows(desired, actual []*Window) ItemDiff[Window] {
 		Mismatched: make([]Mismatch[Window], 0),
 	}
 
-	for key, desiredWindow := range desiredMap {
+	for _, desiredWindow := range desired {
+		key := keyForWindow(desiredWindow)
 		actualWindow, exists := actualMap[key]
 		if !exists {
 			windowDiff.Missing = append(windowDiff.Missing, *desiredWindow)
@@ -44,8 +44,12 @@ func compareSessionWindows(desired, actual []*Window) ItemDiff[Window] {
 		}
 	}
 
-	for _, actualWindow := range actualMap {
-		windowDiff.Extra = append(windowDiff.Extra, *actualWindow)
+	for _, actualWindow := range actual {
+		key := keyForWindow(actualWindow)
+		if _, exists := actualMap[key]; exists {
+			windowDiff.Extra = append(windowDiff.Extra, *actualWindow)
+			delete(actualMap, key)
+		}
 	}
 
 	return windowDiff
@@ -58,9 +62,13 @@ func windowsMatch(desired, actual *Window) bool {
 func windowsByKey(windows []*Window) map[windowKey]*Window {
 	m := make(map[windowKey]*Window, len(windows))
 	for _, w := range windows {
-		m[windowKey{w.Name, w.Path}] = w
+		m[keyForWindow(w)] = w
 	}
 	return m
+}
+
+func keyForWindow(w *Window) windowKey {
+	return windowKey{Name: w.Name, Path: w.Path}
 }
 
 func cloneWindows(ws []*Window) []Window {

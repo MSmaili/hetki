@@ -1,6 +1,8 @@
 package converter
 
 import (
+	"sort"
+
 	"github.com/MSmaili/hetki/internal/plan"
 	"github.com/MSmaili/hetki/internal/state"
 )
@@ -13,7 +15,8 @@ func StateDiffToPlanDiff(sd state.Diff, desired *state.State) plan.Diff {
 	pd.Sessions.Missing = convertMissingSessions(sd.Sessions.Missing, desired)
 	pd.Sessions.Extra = convertExtraSessions(sd.Sessions.Extra)
 
-	for sessionName, wd := range sd.Windows {
+	for _, sessionName := range sortedWindowDiffSessions(sd.Windows) {
+		wd := sd.Windows[sessionName]
 		pd.Windows[sessionName] = convertWindowDiff(wd)
 	}
 
@@ -65,4 +68,13 @@ func StateWindowToPlan(w *state.Window) plan.Window {
 		pw.Panes = append(pw.Panes, plan.Pane{Path: p.Path, Command: p.Command, Zoom: p.Zoom})
 	}
 	return pw
+}
+
+func sortedWindowDiffSessions[V any](diff map[string]V) []string {
+	names := make([]string, 0, len(diff))
+	for name := range diff {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

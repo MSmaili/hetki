@@ -21,6 +21,16 @@ var (
 	verboseEnabled = false
 )
 
+func SetOutput(w io.Writer) io.Writer {
+	previous := output
+	if w == nil {
+		output = os.Stderr
+		return previous
+	}
+	output = w
+	return previous
+}
+
 func SetVerbose(verbose bool) {
 	verboseEnabled = verbose
 }

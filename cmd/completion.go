@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"path/filepath"
+	"sort"
 
 	"github.com/MSmaili/hetki/internal/manifest"
 	"github.com/spf13/cobra"
@@ -20,6 +21,7 @@ func getWorkspaceNames() ([]string, error) {
 	for name := range paths {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names, nil
 }
 

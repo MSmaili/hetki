@@ -43,7 +43,7 @@ func runSave(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	b, err := backend.Detect()
+	b, err := detectBackend()
 	if err != nil {
 		return fmt.Errorf("failed to detect backend: %w\nHint: Make sure a supported multiplexer is running", err)
 	}
@@ -63,7 +63,7 @@ func runSave(cmd *cobra.Command, args []string) error {
 
 func validateSaveFlags() error {
 	if savePath != "" && saveName != "" {
-		return fmt.Errorf("cannot use both -p and -n flags\nUse either: hetki save -p <path> OR hetki save -n <name>")
+		return fmt.Errorf("cannot use both -p and -n flags\nUse either: muxie save -p <path> OR muxie save -n <name>")
 	}
 	return nil
 }
@@ -115,7 +115,7 @@ func determineSavePath(args []string) (string, error) {
 	}
 
 	if saveAll {
-		return "", fmt.Errorf("--all requires a destination\nUse: hetki save --all -p <path>, hetki save --all -n <name>, or hetki save --all .")
+		return "", fmt.Errorf("--all requires a destination\nUse: muxie save --all -p <path>, muxie save --all -n <name>, or muxie save --all .")
 	}
 
 	return "", fmt.Errorf("no save target specified\nHint: Use -p <path>, -n <name>, or . to specify where to save")

@@ -42,7 +42,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	b, err := backend.Detect()
+	b, err := detectBackend()
 	if err != nil {
 		return fmt.Errorf("failed to detect backend: %w", err)
 	}
@@ -85,7 +85,7 @@ func buildPlan(b backend.Backend, workspace *manifest.Workspace) (*plan.Plan, er
 
 	result, err := b.QueryState()
 	if err != nil {
-		result = backend.StateResult{}
+		return nil, fmt.Errorf("failed to query backend state: %w\nHint: Verify tmux is running and retry, or inspect live sessions with 'muxie list sessions'", err)
 	}
 	actual := converter.BackendResultToState(result)
 

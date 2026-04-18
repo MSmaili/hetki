@@ -129,3 +129,22 @@ func TestPlanValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestStrategiesOrderWindowActionsBySessionName(t *testing.T) {
+	diff := Diff{
+		Windows: map[string]ItemDiff[Window]{
+			"zeta":  {Missing: []Window{{Name: "z-window", Path: "~/z"}}},
+			"alpha": {Missing: []Window{{Name: "a-window", Path: "~/a"}}},
+		},
+	}
+
+	want := []Action{
+		CreateWindowAction{Session: "alpha", Name: "a-window", Path: "~/a"},
+		CreateWindowAction{Session: "zeta", Name: "z-window", Path: "~/z"},
+	}
+
+	for range 100 {
+		plan := (&MergeStrategy{}).Plan(diff)
+		assert.Equal(t, want, plan.Actions)
+	}
+}

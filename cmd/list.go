@@ -25,10 +25,10 @@ var listCmd = &cobra.Command{
 	Long: `List workspace files or running tmux sessions.
 
 Examples:
-  hetki list                              # List workspace names
-  hetki list workspaces --sessions        # workspace:session
-  hetki list sessions --windows --format=tree  # Pretty tree view
-  hetki list sessions --windows --format=json  # JSON output`,
+	  muxie list                              # List workspace names
+	  muxie list workspaces --sessions        # workspace:session
+	  muxie list sessions --windows --format=tree  # Pretty tree view
+	  muxie list sessions --windows --format=json  # JSON output`,
 	RunE: runList,
 }
 
@@ -98,21 +98,21 @@ func runList(cmd *cobra.Command, args []string) error {
 func validateListFlags(mode string) error {
 	validFormats := map[string]bool{"flat": true, "indent": true, "tree": true, "json": true}
 	if !validFormats[listFormat] {
-		return fmt.Errorf("invalid format %q\nValid formats: flat, indent, tree, json\nExample: hetki list --format=tree", listFormat)
+		return fmt.Errorf("invalid format %q\nValid formats: flat, indent, tree, json\nExample: muxie list --format=tree", listFormat)
 	}
 	if mode == "workspaces" {
 		if listWindows && !listSessions {
-			return fmt.Errorf("--windows requires --sessions\nExample: hetki list workspaces --sessions --windows")
+			return fmt.Errorf("--windows requires --sessions\nExample: muxie list workspaces --sessions --windows")
 		}
 		if listCurrent {
-			return fmt.Errorf("--current only works with sessions\nExample: hetki list sessions --current")
+			return fmt.Errorf("--current only works with sessions\nExample: muxie list sessions --current")
 		}
 		if listMarker != "" {
-			return fmt.Errorf("--marker only works with sessions\nExample: hetki list sessions --marker '➤ '")
+			return fmt.Errorf("--marker only works with sessions\nExample: muxie list sessions --marker '➤ '")
 		}
 	}
 	if listPanes && !listWindows {
-		return fmt.Errorf("--panes requires --windows\nExample: hetki list sessions --windows --panes")
+		return fmt.Errorf("--panes requires --windows\nExample: muxie list sessions --windows --panes")
 	}
 	return nil
 }
@@ -171,7 +171,7 @@ func listWorkspaceFiles() error {
 }
 
 func listActiveSessions() error {
-	b, err := backend.Detect()
+	b, err := detectBackend()
 	if err != nil {
 		return fmt.Errorf("failed to detect backend: %w\nHint: Make sure a supported multiplexer is running", err)
 	}

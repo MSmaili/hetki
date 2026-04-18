@@ -84,3 +84,33 @@ func TestLoadStateQuery(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadStateQueryOrdersSessionsAndWindows(t *testing.T) {
+	q := LoadStateQuery{}
+	t.Setenv("TMUX", "")
+
+	output := "0\n0\n$2|zeta|server|1|1|0|1|~/zeta/server|node\n$2|zeta|editor|0|0|0|0|~/zeta/editor|vim\n$1|alpha|worker|1|1|0|1|~/alpha/worker|make\n$1|alpha|editor|0|0|0|0|~/alpha/editor|vim"
+
+	want := []Session{
+		{
+			Name: "alpha",
+			Windows: []Window{
+				{Name: "editor", Index: 0, Path: "~/alpha/editor", Panes: []Pane{{Path: "~/alpha/editor", Command: "vim"}}},
+				{Name: "worker", Index: 1, Path: "~/alpha/worker", Panes: []Pane{{Path: "~/alpha/worker", Command: "make"}}},
+			},
+		},
+		{
+			Name: "zeta",
+			Windows: []Window{
+				{Name: "editor", Index: 0, Path: "~/zeta/editor", Panes: []Pane{{Path: "~/zeta/editor", Command: "vim"}}},
+				{Name: "server", Index: 1, Path: "~/zeta/server", Panes: []Pane{{Path: "~/zeta/server", Command: "node"}}},
+			},
+		},
+	}
+
+	for range 100 {
+		got, err := q.Parse(output)
+		assert.NoError(t, err)
+		assert.Equal(t, want, got.Sessions)
+	}
+}

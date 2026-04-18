@@ -1,6 +1,9 @@
 package backend
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 type DetectFunc func() (Backend, error)
 
@@ -18,8 +21,14 @@ func Detect(name ...string) (Backend, error) {
 		}
 		return f()
 	}
-	for _, f := range registry {
-		if b, err := f(); err == nil {
+	names := make([]string, 0, len(registry))
+	for name := range registry {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		if b, err := registry[name](); err == nil {
 			return b, nil
 		}
 	}

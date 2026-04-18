@@ -103,5 +103,5 @@ func (r *Resolver) findLocalWorkspace() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no local workspace found (.hetki.{yaml,yml,json})\nHint: Create one with 'hetki save .' or specify a workspace name")
+	return "", fmt.Errorf("no local workspace found (.hetki.{yaml,yml,json})\nHint: Create one with 'muxie save .' or specify a workspace name")
 }

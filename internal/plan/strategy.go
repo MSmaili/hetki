@@ -1,5 +1,7 @@
 package plan
 
+import "sort"
+
 type Strategy interface {
 	Plan(diff Diff) *Plan
 }
@@ -27,7 +29,8 @@ func killExtra(plan *Plan, diff Diff) {
 		plan.Actions = append(plan.Actions, KillSessionAction{Name: session.Name})
 	}
 
-	for sessionName, windowDiff := range diff.Windows {
+	for _, sessionName := range sortedWindowDiffSessions(diff.Windows) {
+		windowDiff := diff.Windows[sessionName]
 		for _, window := range windowDiff.Extra {
 			plan.Actions = append(plan.Actions, KillWindowAction{
 				Session: sessionName,
@@ -38,7 +41,8 @@ func killExtra(plan *Plan, diff Diff) {
 }
 
 func recreateMismatched(plan *Plan, diff Diff) {
-	for sessionName, windowDiff := range diff.Windows {
+	for _, sessionName := range sortedWindowDiffSessions(diff.Windows) {
+		windowDiff := diff.Windows[sessionName]
 		for _, mismatch := range windowDiff.Mismatched {
 			plan.Actions = append(plan.Actions, KillWindowAction{
 				Session: sessionName,
@@ -54,7 +58,8 @@ func createMissing(plan *Plan, diff Diff) {
 		createSession(plan, session)
 	}
 
-	for sessionName, windowDiff := range diff.Windows {
+	for _, sessionName := range sortedWindowDiffSessions(diff.Windows) {
+		windowDiff := diff.Windows[sessionName]
 		for _, window := range windowDiff.Missing {
 			createWindow(plan, sessionName, window)
 		}
@@ -124,4 +129,13 @@ func addPanesAndCommands(plan *Plan, sessionName string, window Window) {
 			})
 		}
 	}
+}
+
+func sortedWindowDiffSessions[V any](diff map[string]ItemDiff[V]) []string {
+	names := make([]string, 0, len(diff))
+	for name := range diff {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

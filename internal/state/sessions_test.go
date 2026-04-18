@@ -25,7 +25,7 @@ func TestCompareSessions(t *testing.T) {
 			},
 		},
 		{
-			name: "Extra session when not in desired",
+			name:    "Extra session when not in desired",
 			desired: NewState(),
 			actual: &State{Sessions: map[string]*Session{
 				"session1": {Name: "session1"},
@@ -55,5 +55,25 @@ func TestCompareSessions(t *testing.T) {
 			diff := Compare(tt.desired, tt.actual)
 			tt.test(t, diff)
 		})
+	}
+}
+
+func TestCompareSessionsOrdersResultsBySessionName(t *testing.T) {
+	desired := &State{Sessions: map[string]*Session{
+		"gamma": {Name: "gamma"},
+		"alpha": {Name: "alpha"},
+		"beta":  {Name: "beta"},
+	}}
+	actual := &State{Sessions: map[string]*Session{
+		"delta": {Name: "delta"},
+		"beta":  {Name: "beta"},
+		"omega": {Name: "omega"},
+	}}
+
+	for range 100 {
+		diff := Compare(desired, actual)
+		assert.Equal(t, []string{"alpha", "gamma"}, diff.Sessions.Missing)
+		assert.Equal(t, []string{"delta", "omega"}, diff.Sessions.Extra)
+		assert.Equal(t, []string{"beta"}, CommonSessions(desired, actual))
 	}
 }

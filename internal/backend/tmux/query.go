@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -182,8 +183,18 @@ func (b *stateBuilder) getOrCreateWindow(sess *Session, name string, index int, 
 
 func (b *stateBuilder) result() LoadStateResult {
 	sessions := make([]Session, 0, len(b.sessions))
-	for _, s := range b.sessions {
-		sessions = append(sessions, *s)
+	names := make([]string, 0, len(b.sessions))
+	for name := range b.sessions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		session := *b.sessions[name]
+		sort.Slice(session.Windows, func(i, j int) bool {
+			return session.Windows[i].Index < session.Windows[j].Index
+		})
+		sessions = append(sessions, session)
 	}
 	return LoadStateResult{Sessions: sessions, Active: b.active}
 }
