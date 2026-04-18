@@ -87,7 +87,7 @@ func (r *Resolver) findNamedWorkspace(name string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("named workspace not found: %s\nHint: List available workspaces with 'muxie list' or create one with 'muxie save -n %s'", name, name)
+	return "", fmt.Errorf("named workspace not found: %s\nHint: List available workspaces with 'hetki list' or create one with 'hetki save -n %s'", name, name)
 }
 
 func (r *Resolver) findLocalWorkspace() (string, error) {
@@ -103,5 +103,5 @@ func (r *Resolver) findLocalWorkspace() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("no local workspace found (.hetki.{yaml,yml,json})\nHint: Create one with 'muxie save .' or specify a workspace name")
+	return "", fmt.Errorf("no local workspace found (.hetki.{yaml,yml,json})\nHint: Create one with 'hetki save .' or specify a workspace name")
 }

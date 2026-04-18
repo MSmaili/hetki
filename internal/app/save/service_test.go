@@ -40,7 +40,7 @@ func TestServiceRunWritesCurrentSessionWorkspace(t *testing.T) {
 			Name: "dev",
 			Windows: []backend.Window{{
 				Name: "editor",
-				Path: filepath.Join(home, "code", "muxie"),
+				Path: filepath.Join(home, "code", "hetki"),
 			}},
 		}},
 		Active: backend.ActiveContext{Session: "dev"},
@@ -57,9 +57,9 @@ func TestServiceRunWritesCurrentSessionWorkspace(t *testing.T) {
 	require.Len(t, workspace.Sessions, 1)
 	assert.Equal(t, "dev", workspace.Sessions[0].Name)
 	require.Len(t, workspace.Sessions[0].Windows, 1)
-	assert.Equal(t, filepath.Join(home, "code", "muxie"), workspace.Sessions[0].Windows[0].Path)
+	assert.Equal(t, filepath.Join(home, "code", "hetki"), workspace.Sessions[0].Windows[0].Path)
 
 	contents, err := os.ReadFile(outputPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(contents), "path: ~/code/muxie")
+	assert.Contains(t, string(contents), "path: ~/code/hetki")
 }

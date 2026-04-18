@@ -25,7 +25,7 @@ func TestServiceRunDryRunUsesUpdaterDryRun(t *testing.T) {
 	updater := &stubUpdater{}
 	service := Service{
 		SetVerbose:       func(bool) {},
-		Executable:       func() (string, error) { return "/tmp/muxie", nil },
+		Executable:       func() (string, error) { return "/tmp/hetki", nil },
 		DetermineUpdater: func(string) (Updater, error) { return updater, nil },
 		GetLatestVersion: func() (string, error) {
 			t.Fatal("GetLatestVersion should not be called in dry-run mode")
@@ -43,7 +43,7 @@ func TestServiceRunSkipsUpdateWhenAlreadyLatest(t *testing.T) {
 	updater := &stubUpdater{}
 	service := Service{
 		SetVerbose:       func(bool) {},
-		Executable:       func() (string, error) { return "/tmp/muxie", nil },
+		Executable:       func() (string, error) { return "/tmp/hetki", nil },
 		DetermineUpdater: func(string) (Updater, error) { return updater, nil },
 		GetLatestVersion: func() (string, error) { return "v1.2.3", nil },
 	}

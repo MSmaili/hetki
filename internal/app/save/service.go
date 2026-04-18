@@ -56,7 +56,7 @@ func (s Service) detectBackend() (backend.Backend, error) {
 
 func validateOptions(opts Options) error {
 	if opts.Path != "" && opts.Name != "" {
-		return fmt.Errorf("cannot use both -p and -n flags\nUse either: muxie save -p <path> OR muxie save -n <name>")
+		return fmt.Errorf("cannot use both -p and -n flags\nUse either: hetki save -p <path> OR hetki save -n <name>")
 	}
 	return nil
 }
@@ -108,7 +108,7 @@ func determineSavePath(opts Options) (string, error) {
 	}
 
 	if opts.All {
-		return "", fmt.Errorf("--all requires a destination\nUse: muxie save --all -p <path>, muxie save --all -n <name>, or muxie save --all .")
+		return "", fmt.Errorf("--all requires a destination\nUse: hetki save --all -p <path>, hetki save --all -n <name>, or hetki save --all .")
 	}
 
 	return "", fmt.Errorf("no save target specified\nHint: Use -p <path>, -n <name>, or . to specify where to save")

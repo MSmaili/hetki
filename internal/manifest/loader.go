@@ -15,7 +15,7 @@ func GetConfigDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "muxie"), nil
+	return filepath.Join(home, ".config", "hetki"), nil
 }
 
 type Loader interface {

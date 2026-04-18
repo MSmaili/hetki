@@ -65,7 +65,7 @@ func buildPlan(b backend.Backend, workspace *manifest.Workspace, force bool) (*p
 
 	result, err := b.QueryState()
 	if err != nil {
-		return nil, fmt.Errorf("failed to query backend state: %w\nHint: Verify tmux is running and retry, or inspect live sessions with 'muxie list sessions'", err)
+		return nil, fmt.Errorf("failed to query backend state: %w\nHint: Verify tmux is running and retry, or inspect live sessions with 'hetki list sessions'", err)
 	}
 	actual := converter.BackendResultToState(result)
 

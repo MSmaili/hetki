@@ -18,11 +18,11 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:           "muxie",
-	Short:         "muxie - Terminal Multiplexer Session Manager",
+	Use:           "hetki",
+	Short:         "hetki - Terminal Multiplexer Session Manager",
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	Long: `muxie is a terminal multiplexer session manager that helps you manage complex tmux sessions with less manual setup.
+	Long: `hetki is a terminal multiplexer session manager that helps you manage complex tmux sessions with less manual setup.
 
 It supports:
 - Multiple sessions and windows with panes
@@ -33,7 +33,7 @@ It supports:
 }
 
 func init() {
-	rootCmd.SetVersionTemplate(fmt.Sprintf("muxie version %s\ncommit: %s\nbuilt: %s\n", Version, GitCommit, BuildDate))
+	rootCmd.SetVersionTemplate(fmt.Sprintf("hetki version %s\ncommit: %s\nbuilt: %s\n", Version, GitCommit, BuildDate))
 }
 
 func Execute() {

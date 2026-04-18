@@ -13,7 +13,7 @@ var (
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Update muxie to the latest version",
+	Short: "Update hetki to the latest version",
 	RunE:  runUpdate,
 }
 

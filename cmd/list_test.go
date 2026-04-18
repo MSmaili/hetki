@@ -23,7 +23,7 @@ func TestRunListWorkspaceFormats(t *testing.T) {
 	t.Run("flat names are sorted", func(t *testing.T) {
 		resetCommandGlobals()
 		home := t.TempDir()
-		workspacesDir := filepath.Join(home, ".config", "muxie", "workspaces")
+		workspacesDir := filepath.Join(home, ".config", "hetki", "workspaces")
 		require.NoError(t, os.MkdirAll(workspacesDir, 0755))
 		writeWorkspaceFile(t, workspacesDir, "zeta.yaml", workspaceYAML)
 		writeWorkspaceFile(t, workspacesDir, "alpha.yaml", workspaceYAML)
@@ -39,7 +39,7 @@ func TestRunListWorkspaceFormats(t *testing.T) {
 	t.Run("tree format includes stable session and pane output", func(t *testing.T) {
 		resetCommandGlobals()
 		home := t.TempDir()
-		workspacesDir := filepath.Join(home, ".config", "muxie", "workspaces")
+		workspacesDir := filepath.Join(home, ".config", "hetki", "workspaces")
 		require.NoError(t, os.MkdirAll(workspacesDir, 0755))
 		writeWorkspaceFile(t, workspacesDir, "alpha.yaml", workspaceYAML)
 		t.Setenv("HOME", home)
@@ -59,7 +59,7 @@ func TestRunListWorkspaceFormats(t *testing.T) {
 	t.Run("json format matches listed workspaces", func(t *testing.T) {
 		resetCommandGlobals()
 		home := t.TempDir()
-		workspacesDir := filepath.Join(home, ".config", "muxie", "workspaces")
+		workspacesDir := filepath.Join(home, ".config", "hetki", "workspaces")
 		require.NoError(t, os.MkdirAll(workspacesDir, 0755))
 		writeWorkspaceFile(t, workspacesDir, "alpha.yaml", workspaceYAML)
 		t.Setenv("HOME", home)

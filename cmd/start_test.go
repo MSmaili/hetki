@@ -63,7 +63,7 @@ func TestRunStartFailsWhenBackendStateQueryFails(t *testing.T) {
 	err = runStart(nil, nil)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "failed to query backend state: query failed")
-	assert.ErrorContains(t, err, "muxie list sessions")
+	assert.ErrorContains(t, err, "hetki list sessions")
 	assert.Zero(t, stub.dryRunCalls)
 	assert.Zero(t, stub.applyCalls)
 }
