@@ -94,3 +94,15 @@ func TestMockClient_Execute(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, CreateSession{Name: "dev", Path: "~/code"}, capturedAction)
 }
+
+func TestBuildBatchArgs(t *testing.T) {
+	assert.Equal(t, []string{
+		"new-session", "-d", "-s", "dev", "-n", "editor", ";",
+		"send-keys", "-t", "dev:0", "npm test", "Enter", ";",
+		"select-layout", "-t", "dev:0", "tiled",
+	}, buildBatchArgs([]Action{
+		CreateSession{Name: "dev", WindowName: "editor"},
+		SendKeys{Target: "dev:0", Keys: "npm test"},
+		SelectLayout{Target: "dev:0", Layout: "tiled"},
+	}))
+}

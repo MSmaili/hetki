@@ -62,34 +62,26 @@ func (c *client) ExecuteBatch(actions []Action) error {
 		return nil
 	}
 
-	err := c.executeSource(actions)
+	err := c.executeBatch(actions)
 	if err != nil && c.isServerNotRunning(err) {
 		if err := exec.Command(c.bin, actions[0].Args()...).Run(); err != nil {
 			return fmt.Errorf("failed to start tmux: %w", err)
 		}
 		if len(actions) > 1 {
-			return c.executeSource(actions[1:])
+			return c.executeBatch(actions[1:])
 		}
 		return nil
 	}
 	return err
 }
 
-func (c *client) executeSource(actions []Action) error {
-	var script strings.Builder
-	for _, action := range actions {
-		script.WriteString(quoteArgs(action.Args()))
-		script.WriteString("\n")
-	}
-
-	cmd := exec.Command(c.bin, "source", "-")
-	cmd.Stdin = strings.NewReader(script.String())
-
+func (c *client) executeBatch(actions []Action) error {
+	cmd := exec.Command(c.bin, buildBatchArgs(actions)...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("tmux source failed: %v\nstderr: %s\nscript:\n%s", err, stderr.String(), script.String())
+		return fmt.Errorf("tmux batch failed: %v (%s)", err, stderr.String())
 	}
 	return nil
 }
@@ -98,14 +90,13 @@ func (c *client) isServerNotRunning(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "no server running")
 }
 
-func quoteArgs(args []string) string {
-	quoted := make([]string, len(args))
-	for i, arg := range args {
-		if strings.ContainsAny(arg, " \t\"'") {
-			quoted[i] = fmt.Sprintf("%q", arg)
-		} else {
-			quoted[i] = arg
+func buildBatchArgs(actions []Action) []string {
+	args := make([]string, 0, len(actions)*4)
+	for i, action := range actions {
+		if i > 0 {
+			args = append(args, ";")
 		}
+		args = append(args, action.Args()...)
 	}
-	return strings.Join(quoted, " ")
+	return args
 }
