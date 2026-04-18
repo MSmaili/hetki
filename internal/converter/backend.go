@@ -19,7 +19,7 @@ func BackendResultToState(result backend.StateResult) *state.State {
 func backendWindowToState(w backend.Window) *state.Window {
 	window := &state.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
 	for _, p := range w.Panes {
-		window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
+		window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command, Zoom: p.Zoom})
 	}
 	return window
 }

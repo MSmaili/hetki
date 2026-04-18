@@ -52,6 +52,7 @@ func (b *TmuxBackend) QueryState() (backend.StateResult, error) {
 					Index:   k,
 					Path:    p.Path,
 					Command: p.Command,
+					Zoom:    p.Zoom,
 				}
 			}
 			windows[j] = backend.Window{

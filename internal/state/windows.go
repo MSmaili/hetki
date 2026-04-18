@@ -1,5 +1,7 @@
 package state
 
+import "strings"
+
 type windowKey struct {
 	Name string
 	Path string
@@ -56,7 +58,50 @@ func compareSessionWindows(desired, actual []*Window) ItemDiff[Window] {
 }
 
 func windowsMatch(desired, actual *Window) bool {
-	return len(desired.Panes) == len(actual.Panes)
+	if !layoutMatches(desired.Layout, actual.Layout) {
+		return false
+	}
+
+	if len(desired.Panes) != len(actual.Panes) {
+		return false
+	}
+
+	// Panes are matched by stable positional order after window matching by name+path.
+	for i := range desired.Panes {
+		if !panesMatch(desired.Panes[i], actual.Panes[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func panesMatch(desired, actual *Pane) bool {
+	return desired.Path == actual.Path && desired.Command == actual.Command && desired.Zoom == actual.Zoom
+}
+
+func layoutMatches(desired, actual string) bool {
+	if desired == "" || desired == actual {
+		return true
+	}
+
+	// Best effort: manifests commonly use preset names like "tiled", while tmux
+	// reports the live layout as a serialized layout string that will not match
+	// the preset name directly.
+	if isNamedLayout(desired) {
+		return true
+	}
+
+	return false
+}
+
+func isNamedLayout(layout string) bool {
+	switch strings.TrimSpace(layout) {
+	case "even-horizontal", "even-vertical", "main-horizontal", "main-vertical", "tiled":
+		return true
+	default:
+		return false
+	}
 }
 
 func windowsByKey(windows []*Window) map[windowKey]*Window {

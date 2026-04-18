@@ -49,7 +49,7 @@ func (q LoadStateQuery) Args() []string {
 		";", "show-options", "-gv", "base-index",
 		";", "show-options", "-gv", "pane-base-index",
 		";", "list-panes", "-a",
-		"-F", "#{session_id}|#{session_name}|#{window_name}|#{window_index}|#{window_active}|#{pane_index}|#{pane_active}|#{pane_current_path}|#{pane_current_command}",
+		"-F", "#{session_id}|#{session_name}|#{window_name}|#{window_index}|#{window_layout}|#{window_zoomed_flag}|#{window_active}|#{pane_index}|#{pane_active}|#{pane_current_path}|#{pane_current_command}",
 	}
 }
 
@@ -85,6 +85,8 @@ func (q LoadStateQuery) Parse(output string) (LoadStateResult, error) {
 type paneLine struct {
 	sessionID, sessionName, windowName string
 	windowIndex                        int
+	windowLayout                       string
+	windowZoomed                       bool
 	windowActive                       bool
 	paneIndex                          int
 	paneActive                         bool
@@ -99,7 +101,7 @@ func parsePaneLine(line string) (paneLine, bool) {
 
 	var p paneLine
 	var ok bool
-	var windowIndexStr, windowActiveStr, paneIndexStr, paneActiveStr string
+	var windowIndexStr, windowZoomedStr, windowActiveStr, paneIndexStr, paneActiveStr string
 
 	if p.sessionID, line, ok = strings.Cut(line, "|"); !ok {
 		return paneLine{}, false
@@ -114,6 +116,13 @@ func parsePaneLine(line string) (paneLine, bool) {
 		return paneLine{}, false
 	}
 	fmt.Sscanf(windowIndexStr, "%d", &p.windowIndex)
+	if p.windowLayout, line, ok = strings.Cut(line, "|"); !ok {
+		return paneLine{}, false
+	}
+	if windowZoomedStr, line, ok = strings.Cut(line, "|"); !ok {
+		return paneLine{}, false
+	}
+	p.windowZoomed = windowZoomedStr == "1"
 	if windowActiveStr, line, ok = strings.Cut(line, "|"); !ok {
 		return paneLine{}, false
 	}
@@ -158,8 +167,8 @@ func (b *stateBuilder) addPane(p paneLine, currentID string) {
 	}
 
 	sess := b.getOrCreateSession(p.sessionName)
-	win := b.getOrCreateWindow(sess, p.windowName, p.windowIndex, p.panePath)
-	win.Panes = append(win.Panes, Pane{Path: p.panePath, Command: p.paneCmd})
+	win := b.getOrCreateWindow(sess, p.windowName, p.windowIndex, p.windowLayout, p.panePath)
+	win.Panes = append(win.Panes, Pane{Path: p.panePath, Command: p.paneCmd, Zoom: p.windowZoomed && p.paneActive})
 }
 
 func (b *stateBuilder) getOrCreateSession(name string) *Session {
@@ -171,13 +180,16 @@ func (b *stateBuilder) getOrCreateSession(name string) *Session {
 	return sess
 }
 
-func (b *stateBuilder) getOrCreateWindow(sess *Session, name string, index int, path string) *Window {
+func (b *stateBuilder) getOrCreateWindow(sess *Session, name string, index int, layout, path string) *Window {
 	for i := range sess.Windows {
 		if sess.Windows[i].Index == index {
+			if layout != "" {
+				sess.Windows[i].Layout = layout
+			}
 			return &sess.Windows[i]
 		}
 	}
-	sess.Windows = append(sess.Windows, Window{Name: name, Index: index, Path: path})
+	sess.Windows = append(sess.Windows, Window{Name: name, Index: index, Path: path, Layout: layout})
 	return &sess.Windows[len(sess.Windows)-1]
 }
 
