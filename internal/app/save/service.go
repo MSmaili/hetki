@@ -2,10 +2,9 @@ package save
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
 
+	appshared "github.com/MSmaili/hetki/internal/app"
 	"github.com/MSmaili/hetki/internal/backend"
 	"github.com/MSmaili/hetki/internal/manifest"
 )
@@ -121,12 +120,12 @@ func saveWorkspace(sessions []backend.Session, outputPath string, saveAll bool) 
 		return "", fmt.Errorf("resolving absolute path: %w", err)
 	}
 
-	workspace := convertToWorkspace(sessions)
+	workspace := appshared.WorkspaceFromSessions(sessions)
 
 	if !saveAll {
 		loader := manifest.NewFileLoader(absPath)
 		if existing, err := loader.Load(); err == nil {
-			workspace = mergeWorkspaces(existing, workspace)
+			workspace = appshared.MergeWorkspaces(existing, workspace)
 		}
 	}
 
@@ -135,69 +134,4 @@ func saveWorkspace(sessions []backend.Session, outputPath string, saveAll bool) 
 	}
 
 	return absPath, nil
-}
-
-func mergeWorkspaces(existing, new *manifest.Workspace) *manifest.Workspace {
-	seen := make(map[string]int, len(existing.Sessions))
-	for i, sess := range existing.Sessions {
-		seen[sess.Name] = i
-	}
-
-	for _, sess := range new.Sessions {
-		if idx, ok := seen[sess.Name]; ok {
-			existing.Sessions[idx] = sess
-		} else {
-			existing.Sessions = append(existing.Sessions, sess)
-		}
-	}
-	return existing
-}
-
-func convertToWorkspace(sessions []backend.Session) *manifest.Workspace {
-	ws := &manifest.Workspace{Sessions: make([]manifest.Session, len(sessions))}
-
-	for i, sess := range sessions {
-		ws.Sessions[i] = manifest.Session{
-			Name:    sess.Name,
-			Windows: convertWindows(sess.Windows),
-		}
-	}
-
-	return ws
-}
-
-func convertWindows(windows []backend.Window) []manifest.Window {
-	result := make([]manifest.Window, len(windows))
-	for i, w := range windows {
-		result[i] = manifest.Window{
-			Name: w.Name,
-			Path: contractHomePath(w.Path),
-		}
-		if len(w.Panes) > 1 {
-			result[i].Panes = convertPanes(w.Panes)
-		}
-	}
-	return result
-}
-
-func contractHomePath(path string) string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return path
-	}
-	if strings.HasPrefix(path, home+"/") {
-		return "~" + strings.TrimPrefix(path, home)
-	}
-	if path == home {
-		return "~"
-	}
-	return path
-}
-
-func convertPanes(panes []backend.Pane) []manifest.Pane {
-	result := make([]manifest.Pane, len(panes))
-	for i, p := range panes {
-		result[i] = manifest.Pane{Path: contractHomePath(p.Path)}
-	}
-	return result
 }

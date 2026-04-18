@@ -3,6 +3,7 @@ package start
 import (
 	"fmt"
 
+	appshared "github.com/MSmaili/hetki/internal/app"
 	"github.com/MSmaili/hetki/internal/backend"
 	"github.com/MSmaili/hetki/internal/converter"
 	"github.com/MSmaili/hetki/internal/logger"
@@ -49,24 +50,7 @@ func (s Service) loadWorkspace(nameOrPath string) (*manifest.Workspace, string, 
 	if s.LoadWorkspace != nil {
 		return s.LoadWorkspace(nameOrPath)
 	}
-
-	resolver := manifest.NewResolver()
-	workspacePath, err := resolver.Resolve(nameOrPath)
-	if err != nil {
-		return nil, "", err
-	}
-
-	loader := manifest.NewFileLoader(workspacePath)
-	workspace, err := loader.Load()
-	if err != nil {
-		return nil, "", fmt.Errorf("loading workspace: %w", err)
-	}
-
-	if errs := manifest.Validate(workspace); len(errs) > 0 {
-		return nil, "", manifest.ToError(errs)
-	}
-
-	return workspace, workspacePath, nil
+	return appshared.NewWorkspaceLoader().LoadWorkspace(nameOrPath)
 }
 
 func (s Service) detectBackend() (backend.Backend, error) {
