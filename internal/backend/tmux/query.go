@@ -35,10 +35,11 @@ type LoadStateResult struct {
 }
 
 type ActiveContext struct {
-	Session string
-	Window  string
-	Pane    int
-	Path    string
+	Session     string
+	Window      string
+	WindowIndex int
+	Pane        int
+	Path        string
 }
 
 type LoadStateQuery struct{}
@@ -159,6 +160,7 @@ func (b *stateBuilder) addPane(p paneLine, currentID string) {
 		b.active.Session = p.sessionName
 		if p.windowActive {
 			b.active.Window = p.windowName
+			b.active.WindowIndex = p.windowIndex
 		}
 		if p.paneActive {
 			b.active.Pane = p.paneIndex

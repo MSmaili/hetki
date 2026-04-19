@@ -12,6 +12,7 @@ type Session struct {
 
 type Window struct {
 	Name   string
+	Index  int
 	Path   string
 	Layout string
 	Panes  []Pane
@@ -25,8 +26,9 @@ type Pane struct {
 }
 
 type ActiveContext struct {
-	Session string
-	Window  string
-	Pane    int
-	Path    string
+	Session     string
+	Window      string
+	WindowIndex int
+	Pane        int
+	Path        string
 }

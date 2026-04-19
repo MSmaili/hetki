@@ -32,3 +32,33 @@ func TestMapActionsUsesBackendActionTypes(t *testing.T) {
 		KillWindow{Target: "dev:server"},
 	}, b.mapActions(actions))
 }
+
+func TestResolveWindowIndex(t *testing.T) {
+	sessions := []Session{
+		{
+			Name: "dev",
+			Windows: []Window{
+				{Name: "editor", Index: 1},
+				{Name: "editor", Index: 2},
+				{Name: "logs", Index: 3},
+			},
+		},
+	}
+
+	t.Run("resolves numeric index directly", func(t *testing.T) {
+		idx, err := resolveWindowIndex(sessions, "dev", "2")
+		assert.NoError(t, err)
+		assert.Equal(t, 2, idx)
+	})
+
+	t.Run("resolves by name for legacy targets", func(t *testing.T) {
+		idx, err := resolveWindowIndex(sessions, "dev", "logs")
+		assert.NoError(t, err)
+		assert.Equal(t, 3, idx)
+	})
+
+	t.Run("fails for unknown numeric index", func(t *testing.T) {
+		_, err := resolveWindowIndex(sessions, "dev", "99")
+		assert.Error(t, err)
+	})
+}

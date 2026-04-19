@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/MSmaili/hetki/internal/backend"
@@ -57,6 +58,7 @@ func (b *TmuxBackend) QueryState() (backend.StateResult, error) {
 			}
 			windows[j] = backend.Window{
 				Name:   w.Name,
+				Index:  w.Index,
 				Path:   w.Path,
 				Layout: w.Layout,
 				Panes:  panes,
@@ -71,10 +73,11 @@ func (b *TmuxBackend) QueryState() (backend.StateResult, error) {
 	return backend.StateResult{
 		Sessions: sessions,
 		Active: backend.ActiveContext{
-			Session: result.Active.Session,
-			Window:  result.Active.Window,
-			Pane:    result.Active.Pane,
-			Path:    result.Active.Path,
+			Session:     result.Active.Session,
+			Window:      result.Active.Window,
+			WindowIndex: result.Active.WindowIndex,
+			Pane:        result.Active.Pane,
+			Path:        result.Active.Path,
 		},
 	}, nil
 }
@@ -110,7 +113,7 @@ func (b *TmuxBackend) Switch(target string) error {
 
 	window, paneStr, hasPane := strings.Cut(rest, ".")
 
-	winIndex, err := findWindowIndex(state.Sessions, session, window)
+	winIndex, err := resolveWindowIndex(state.Sessions, session, window)
 	if err != nil {
 		return err
 	}
@@ -149,6 +152,31 @@ func findWindowIndex(sessions []Session, sessionName, windowName string) (int, e
 		return 0, fmt.Errorf("window %q not found in session %q", windowName, sessionName)
 	}
 	return 0, fmt.Errorf("session %q not found", sessionName)
+}
+
+func resolveWindowIndex(sessions []Session, sessionName, window string) (int, error) {
+	if idx, err := strconv.Atoi(strings.TrimSpace(window)); err == nil {
+		if windowIndexExists(sessions, sessionName, idx) {
+			return idx, nil
+		}
+		return 0, fmt.Errorf("window index %d not found in session %q", idx, sessionName)
+	}
+	return findWindowIndex(sessions, sessionName, window)
+}
+
+func windowIndexExists(sessions []Session, sessionName string, index int) bool {
+	for _, s := range sessions {
+		if s.Name != sessionName {
+			continue
+		}
+		for _, w := range s.Windows {
+			if w.Index == index {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }
 
 func (b *TmuxBackend) mapActions(actions []backend.Action) []Action {
