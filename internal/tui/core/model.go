@@ -7,6 +7,7 @@ import (
 
 	"github.com/MSmaili/hetki/internal/tui/contracts"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type DispatchFunc func(context.Context, contracts.Intent) (contracts.ActionResult, error)
@@ -165,12 +166,12 @@ func treePrefix(ancestors []bool, hasNext bool) string {
 	var b strings.Builder
 	for _, ancestorHasNext := range ancestors[:len(ancestors)-1] {
 		if ancestorHasNext {
-			b.WriteString("   |  ")
+			b.WriteString("   │  ")
 		} else {
 			b.WriteString("      ")
 		}
 	}
-	b.WriteString("   |  ")
+	b.WriteString("   │  ")
 	return b.String()
 }
 
@@ -223,9 +224,23 @@ func (m *model) applyFilter() {
 func (m model) reflow() model {
 	m.cursor = clampCursor(m.cursor, len(m.rows))
 	m.listH = m.availableListHeight()
-	m.offset = clampOffset(m.offset, len(m.rows), m.listH)
-	m.offset = ensureCursorVisible(m.offset, m.cursor, len(m.rows), m.listH)
+	effectiveRows := m.listH - countSeparatorsInRange(m.rows, m.offset, m.offset+m.listH)
+	if effectiveRows < 1 {
+		effectiveRows = 1
+	}
+	m.offset = clampOffset(m.offset, len(m.rows), effectiveRows)
+	m.offset = ensureCursorVisible(m.offset, m.cursor, len(m.rows), effectiveRows)
 	return m
+}
+
+func countSeparatorsInRange(rows []row, start, end int) int {
+	count := 0
+	for i := start; i < end && i < len(rows); i++ {
+		if rows[i].Depth == 0 && rows[i].Node.Kind == "session" && i > 0 {
+			count++
+		}
+	}
+	return count
 }
 
 func (m model) availableListHeight() int {
@@ -391,14 +406,25 @@ func truncateWidth(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
-	r := []rune(s)
-	if len(r) <= width {
+	visualW := lipgloss.Width(s)
+	if visualW <= width {
 		return s
 	}
+	r := []rune(s)
 	if width <= 3 {
 		return string(r[:width])
 	}
-	return string(r[:width-3]) + "..."
+	lipglossWidth := 0
+	i := 0
+	for i < len(r) {
+		segW := lipgloss.Width(string(r[i]))
+		if lipglossWidth+segW > width-3 {
+			break
+		}
+		lipglossWidth += segW
+		i++
+	}
+	return string(r[:i]) + "..."
 }
 
 func (m model) modeLabel() string {

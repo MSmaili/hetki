@@ -23,17 +23,16 @@ var (
 	statusStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("151"))
 	helpStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
 	errorStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("210")).Bold(true)
-	keyBarStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("110"))
-	sectionLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("239"))
+	sectionLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 	helpOverlayStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("240")).
 				Padding(0, 1)
 
-	listBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(0, 1)
+	appBorderStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("110")).
+			Padding(0, 2)
 
 	modalStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -51,16 +50,7 @@ func (m model) View() string {
 	}
 	lineWidth = max(48, lineWidth)
 
-	var b strings.Builder
-
-	b.WriteString(topBar(m, lineWidth))
-	b.WriteString("\n")
-	if context := workspaceContext(m.snapshot.ContextBars); context != "" {
-		b.WriteString(metaStyle.Render(truncateWidth(context, lineWidth)))
-		b.WriteString("\n")
-		b.WriteString(sectionLineStyle.Render(strings.Repeat("─", lineWidth)))
-		b.WriteString("\n")
-	}
+	innerW := max(24, lineWidth-appBorderWidth())
 
 	start := m.offset
 	end := m.offset + m.listH
@@ -68,20 +58,32 @@ func (m model) View() string {
 		end = len(m.rows)
 	}
 
-	innerW := max(24, lineWidth-6)
-	lines := make([]string, 0, m.listH)
+	var contentLines []string
+
+	contentLines = append(contentLines, sectionLineStyle.Render(strings.Repeat("─", innerW)))
+	contentLines = append(contentLines, truncateToWidth(topBar(m, innerW), innerW))
+	contentLines = append(contentLines, sectionLineStyle.Render(strings.Repeat("─", innerW)))
 
 	if len(m.rows) == 0 {
-		lines = append(lines, metaStyle.Render(truncateWidth(emptyStateText(m), innerW)))
-		for i := 1; i < m.listH; i++ {
-			lines = append(lines, "")
-		}
+		contentLines = append(contentLines, metaStyle.Render(truncateWidth(emptyStateText(m), innerW)))
 	} else {
-		for i := start; i < end; i++ {
+		var dataLines int
+		for i := start; i < end && dataLines < m.listH; i++ {
 			r := m.rows[i]
+			if r.Depth == 0 && r.Node.Kind == "session" && len(contentLines) > 3 {
+				dataLines++
+				if dataLines > m.listH {
+					break
+				}
+				contentLines = append(contentLines, sectionLineStyle.Render(strings.Repeat("╌", innerW)))
+			}
+			dataLines++
+			if dataLines > m.listH {
+				break
+			}
 			cursor := " "
 			if i == m.cursor {
-				cursor = ">"
+				cursor = "❯"
 			}
 
 			active := ""
@@ -93,17 +95,14 @@ func (m model) View() string {
 			line := renderRowLine(r, cursor, active, innerW, selected)
 			line = withSessionCount(r, line, innerW)
 			line = styleRowLine(r, selected, line)
-			lines = append(lines, line)
-		}
-		for i := end; i < start+m.listH; i++ {
-			lines = append(lines, "")
+			contentLines = append(contentLines, truncateToWidth(line, innerW))
 		}
 	}
 
-	b.WriteString(listBoxStyle.Width(lineWidth - 2).Render(strings.Join(lines, "\n")))
-	b.WriteString("\n")
-
-	statusText := strings.ToUpper(m.modeLabel()) + " | " + m.status
+	statusText := m.status
+	if statusText == "" {
+		statusText = strings.ToUpper(m.modeLabel())
+	}
 	if m.busy {
 		statusText += " | busy"
 	}
@@ -114,31 +113,64 @@ func (m model) View() string {
 		}
 	}
 	if m.err != nil {
-		b.WriteString(errorStyle.Render(truncateWidth(statusText, lineWidth)))
+		contentLines = append(contentLines, errorStyle.Render(truncateWidth(statusText, innerW)))
 	} else {
-		b.WriteString(statusStyle.Render(truncateWidth(statusText, lineWidth)))
+		contentLines = append(contentLines, statusStyle.Render(truncateWidth(statusText, innerW)))
 	}
-	b.WriteString("\n")
 
-	b.WriteString(helpStyle.Render(truncateWidth(statusLine(m), lineWidth)))
-	b.WriteString("\n")
-	b.WriteString(keyBarStyle.Render(truncateWidth(contextualActions(m), lineWidth)))
-	b.WriteString("\n")
+	contentLines = append(contentLines, helpStyle.Render(truncateWidth(compositeBottomLine(m, innerW), innerW)))
 
+	content := strings.Join(contentLines, "\n")
+
+	rendered := appBorderStyle.Width(lineWidth).Render(content)
+
+	var overlay strings.Builder
 	if m.mode == modeInput {
-		b.WriteString(renderInputModal(m, lineWidth))
-		b.WriteString("\n")
+		overlay.WriteString(renderInputModal(m, lineWidth))
+		overlay.WriteString("\n")
 	}
 	if m.mode == modeConfirm {
-		b.WriteString(renderConfirmModal(m, lineWidth))
-		b.WriteString("\n")
+		overlay.WriteString(renderConfirmModal(m, lineWidth))
+		overlay.WriteString("\n")
 	}
 	if m.helpOpen {
-		b.WriteString(renderHelpOverlay(lineWidth))
-		b.WriteString("\n")
+		overlay.WriteString(renderHelpOverlay(lineWidth))
+		overlay.WriteString("\n")
 	}
 
-	return b.String()
+	if overlay.Len() > 0 {
+		return rendered + "\n" + overlay.String()
+	}
+	return rendered
+}
+
+func truncateToWidth(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	visualW := lipgloss.Width(s)
+	if visualW <= width {
+		return s
+	}
+	r := []rune(s)
+	accum := 0
+	last := 0
+	for i := 0; i < len(r); i++ {
+		seg := string(r[i])
+		segW := lipgloss.Width(seg)
+		if accum+segW > width {
+			break
+		}
+		accum += segW
+		last = i + 1
+	}
+	if last >= len(r) {
+		return s
+	}
+	if last <= 0 {
+		return ""
+	}
+	return string(r[:last])
 }
 
 func topBar(m model, width int) string {
@@ -258,36 +290,36 @@ func emptyStateText(m model) string {
 	return "no sessions found"
 }
 
-func contextualActions(m model) string {
-	selected, ok := m.selectedRow()
-	if !ok {
-		return "/ filter  ? help  q exit"
-	}
-	switch selected.Node.Kind {
-	case "session":
-		return "enter switch  a window  e rename  x delete  ? help"
-	case "window":
-		return "enter switch  e rename  x delete  ? help"
-	default:
-		return "e rename  x delete  ? help"
-	}
-}
-
-func statusLine(m model) string {
-	status := m.status
-	if status == "" {
-		status = "ready"
-	}
-	if m.mode == modeFilter {
-		if current, total := m.filterMatchPosition(); total > 0 {
-			status += fmt.Sprintf(" (%d/%d)", current, total)
-		}
-	}
+func compositeBottomLine(m model, lineWidth int) string {
 	position := "0/0"
 	if len(m.rows) > 0 {
 		position = fmt.Sprintf("%d/%d", m.cursor+1, len(m.rows))
 	}
-	return status + " | " + position
+	ws := workspaceContext(m.snapshot.ContextBars)
+	right := "? help"
+	if ws == "" {
+		return position + "  " + right
+	}
+	leftW := lipgloss.Width(position)
+	rightW := lipgloss.Width(right)
+	centerW := lipgloss.Width(ws)
+	available := lineWidth - leftW - rightW
+	if available < 1 {
+		available = 1
+	}
+	if leftW+centerW+rightW >= lineWidth {
+		return position + "  " + ws + "  " + right
+	}
+	gap := lineWidth - leftW - centerW - rightW
+	leftGap := gap / 2
+	rightGap := gap - leftGap
+	if leftGap < 1 {
+		leftGap = 1
+	}
+	if rightGap < 1 {
+		rightGap = 1
+	}
+	return position + strings.Repeat(" ", leftGap) + ws + strings.Repeat(" ", rightGap) + right
 }
 
 func renderHelpOverlay(lineWidth int) string {
@@ -336,6 +368,13 @@ func centerBlock(block string, width int) string {
 		lines[i] = strings.Repeat(" ", padding) + line
 	}
 	return strings.Join(lines, "\n")
+}
+
+func appBorderWidth() int {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(0, 2).
+		GetHorizontalFrameSize()
 }
 
 func max(a, b int) int {
