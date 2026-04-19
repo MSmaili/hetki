@@ -58,13 +58,17 @@ func (a LiveAdapter) snapshotFromBackend(ctx context.Context) (contracts.Snapsho
 	}
 
 	activeTarget := buildActiveTarget(result.Active)
+	activeWorkspace := workspacePathForSession(result.Sessions, result.Active.Session)
+	if activeWorkspace == "" {
+		activeWorkspace = "unmanaged"
+	}
 	snapshot := contracts.Snapshot{
 		Nodes:        make([]contracts.Node, 0, len(result.Sessions)),
 		ActiveNodeID: activeTarget,
 		ContextBars: map[string]string{
 			"source":    "live",
 			"active":    activeTarget,
-			"workspace": "unmanaged",
+			"workspace": activeWorkspace,
 		},
 		Capabilities: map[contracts.Capability]bool{
 			contracts.CapabilityRefresh: true,
@@ -128,4 +132,13 @@ func buildActiveTarget(active backend.ActiveContext) string {
 		return fmt.Sprintf("%s:%s.%d", active.Session, windowRef, active.Pane)
 	}
 	return fmt.Sprintf("%s:%s", active.Session, windowRef)
+}
+
+func workspacePathForSession(sessions []backend.Session, sessionName string) string {
+	for _, sess := range sessions {
+		if sess.Name == sessionName {
+			return sess.WorkspacePath
+		}
+	}
+	return ""
 }

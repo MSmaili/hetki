@@ -65,8 +65,9 @@ func (b *TmuxBackend) QueryState() (backend.StateResult, error) {
 			}
 		}
 		sessions[i] = backend.Session{
-			Name:    s.Name,
-			Windows: windows,
+			Name:          s.Name,
+			WorkspacePath: s.WorkspacePath,
+			Windows:       windows,
 		}
 	}
 
@@ -211,6 +212,8 @@ func (b *TmuxBackend) mapAction(a backend.Action, windowIndex map[string]int) Ac
 		return KillSession{Name: action.Name}
 	case backend.KillWindowAction:
 		return KillWindow{Target: fmt.Sprintf("%s:%s", action.Session, action.Window)}
+	case backend.SetSessionOptionAction:
+		return SetSessionOption{Session: action.Session, Key: action.Key, Value: action.Value}
 	default:
 		return nil
 	}

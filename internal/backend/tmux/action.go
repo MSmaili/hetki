@@ -73,7 +73,6 @@ func (a KillWindow) Args() []string {
 	return []string{"kill-window", "-t", a.Target}
 }
 
-
 type SelectLayout struct {
 	Target string
 	Layout string
@@ -105,4 +104,14 @@ type AttachSession struct {
 
 func (a AttachSession) Args() []string {
 	return []string{"attach-session", "-t", a.Target}
+}
+
+type SetSessionOption struct {
+	Session string
+	Key     string
+	Value   string
+}
+
+func (a SetSessionOption) Args() []string {
+	return []string{"set-option", "-t", a.Session, a.Key, a.Value}
 }

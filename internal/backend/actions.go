@@ -5,6 +5,8 @@ import (
 	"fmt"
 )
 
+const WorkspacePathOption = "@hetki_workspace_path"
+
 type CreateSessionAction struct {
 	Name       string
 	WindowName string
@@ -135,6 +137,23 @@ func (a ZoomPaneAction) Comment() string {
 func (a ZoomPaneAction) Validate() error {
 	if a.Session == "" || a.Window == "" {
 		return errors.New("zoom pane session and window cannot be empty")
+	}
+	return nil
+}
+
+type SetSessionOptionAction struct {
+	Session string
+	Key     string
+	Value   string
+}
+
+func (a SetSessionOptionAction) Comment() string {
+	return fmt.Sprintf("# Set session option: %s %s=%s", a.Session, a.Key, a.Value)
+}
+
+func (a SetSessionOptionAction) Validate() error {
+	if a.Session == "" || a.Key == "" {
+		return errors.New("session option session and key cannot be empty")
 	}
 	return nil
 }

@@ -5,6 +5,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/MSmaili/hetki/internal/backend"
 )
 
 type Query[T any] interface {
@@ -23,8 +25,9 @@ func RunQuery[T any](c Client, q Query[T]) (T, error) {
 }
 
 type Session struct {
-	Name    string
-	Windows []Window
+	Name          string
+	WorkspacePath string
+	Windows       []Window
 }
 
 type LoadStateResult struct {
@@ -50,7 +53,7 @@ func (q LoadStateQuery) Args() []string {
 		";", "show-options", "-gv", "base-index",
 		";", "show-options", "-gv", "pane-base-index",
 		";", "list-panes", "-a",
-		"-F", "#{session_id}|#{session_name}|#{window_name}|#{window_index}|#{window_layout}|#{window_zoomed_flag}|#{window_active}|#{pane_index}|#{pane_active}|#{pane_current_path}|#{pane_current_command}",
+		"-F", "#{session_id}|#{session_name}|#{window_name}|#{window_index}|#{window_layout}|#{window_zoomed_flag}|#{window_active}|#{pane_index}|#{pane_active}|#{pane_current_path}|#{pane_current_command}|#{" + backend.WorkspacePathOption + "}",
 	}
 }
 
@@ -92,6 +95,7 @@ type paneLine struct {
 	paneIndex                          int
 	paneActive                         bool
 	panePath, paneCmd                  string
+	workspacePath                      string
 }
 
 func parsePaneLine(line string) (paneLine, bool) {
@@ -142,7 +146,12 @@ func parsePaneLine(line string) (paneLine, bool) {
 	if p.panePath, line, ok = strings.Cut(line, "|"); !ok {
 		return paneLine{}, false
 	}
-	p.paneCmd = line
+	if idx := strings.LastIndex(line, "|"); idx >= 0 {
+		p.paneCmd = line[:idx]
+		p.workspacePath = line[idx+1:]
+	} else {
+		p.paneCmd = line
+	}
 	return p, true
 }
 
@@ -169,6 +178,9 @@ func (b *stateBuilder) addPane(p paneLine, currentID string) {
 	}
 
 	sess := b.getOrCreateSession(p.sessionName)
+	if sess.WorkspacePath == "" && strings.TrimSpace(p.workspacePath) != "" {
+		sess.WorkspacePath = strings.TrimSpace(p.workspacePath)
+	}
 	win := b.getOrCreateWindow(sess, p.windowName, p.windowIndex, p.windowLayout, p.panePath)
 	win.Panes = append(win.Panes, Pane{Path: p.panePath, Command: p.paneCmd, Zoom: p.windowZoomed && p.paneActive})
 }

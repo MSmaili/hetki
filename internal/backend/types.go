@@ -6,8 +6,9 @@ type StateResult struct {
 }
 
 type Session struct {
-	Name    string
-	Windows []Window
+	Name          string
+	WorkspacePath string
+	Windows       []Window
 }
 
 type Window struct {

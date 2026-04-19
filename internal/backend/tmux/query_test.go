@@ -15,7 +15,7 @@ func TestLoadStateQuery(t *testing.T) {
 			";", "show-options", "-gv", "base-index",
 			";", "show-options", "-gv", "pane-base-index",
 			";", "list-panes", "-a", "-F",
-			"#{session_id}|#{session_name}|#{window_name}|#{window_index}|#{window_layout}|#{window_zoomed_flag}|#{window_active}|#{pane_index}|#{pane_active}|#{pane_current_path}|#{pane_current_command}",
+			"#{session_id}|#{session_name}|#{window_name}|#{window_index}|#{window_layout}|#{window_zoomed_flag}|#{window_active}|#{pane_index}|#{pane_active}|#{pane_current_path}|#{pane_current_command}|#{@hetki_workspace_path}",
 		}
 		assert.Equal(t, expected, q.Args())
 	})
@@ -84,6 +84,19 @@ func TestLoadStateQuery(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
+	}
+}
+
+func TestLoadStateQueryParsesWorkspacePathOption(t *testing.T) {
+	q := LoadStateQuery{}
+	t.Setenv("TMUX", "")
+
+	output := "0\n0\n$1|dev|editor|0|layout-a|0|1|0|1|~/code|vim|/tmp/workspace.yaml"
+
+	got, err := q.Parse(output)
+	assert.NoError(t, err)
+	if assert.Len(t, got.Sessions, 1) {
+		assert.Equal(t, "/tmp/workspace.yaml", got.Sessions[0].WorkspacePath)
 	}
 }
 

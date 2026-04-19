@@ -2,6 +2,8 @@ package start
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	appshared "github.com/MSmaili/hetki/internal/app"
 	"github.com/MSmaili/hetki/internal/backend"
@@ -28,7 +30,7 @@ func NewService(detectBackend func(...string) (backend.Backend, error)) Service 
 }
 
 func (s Service) Run(opts Options) error {
-	workspace, _, err := s.loadWorkspace(opts.Workspace)
+	workspace, workspacePath, err := s.loadWorkspace(opts.Workspace)
 	if err != nil {
 		return err
 	}
@@ -43,7 +45,7 @@ func (s Service) Run(opts Options) error {
 		return err
 	}
 
-	return executePlan(b, p, workspace, opts.DryRun)
+	return executePlan(b, p, workspace, workspacePath, opts.DryRun)
 }
 
 func (s Service) loadWorkspace(nameOrPath string) (*manifest.Workspace, string, error) {
@@ -83,9 +85,10 @@ func selectStrategy(force bool) plan.Strategy {
 	return &plan.MergeStrategy{}
 }
 
-func executePlan(b backend.Backend, p *plan.Plan, workspace *manifest.Workspace, dryRun bool) error {
+func executePlan(b backend.Backend, p *plan.Plan, workspace *manifest.Workspace, workspacePath string, dryRun bool) error {
 	if p.IsEmpty() {
 		logger.Info("Workspace already up to date")
+		warnIfMetadataStampFails(b, workspace, workspacePath)
 		return attachToSession(b, workspace)
 	}
 
@@ -98,7 +101,44 @@ func executePlan(b backend.Backend, p *plan.Plan, workspace *manifest.Workspace,
 		return fmt.Errorf("failed to execute plan: %w\nHint: Check tmux server logs or try with --dry-run to see planned actions", err)
 	}
 
+	warnIfMetadataStampFails(b, workspace, workspacePath)
+
 	return attachToSession(b, workspace)
+}
+
+func warnIfMetadataStampFails(b backend.Backend, workspace *manifest.Workspace, workspacePath string) {
+	if err := stampWorkspacePath(b, workspace, workspacePath); err != nil {
+		logger.Warning("workspace metadata not set: %v", err)
+	}
+}
+
+func stampWorkspacePath(b backend.Backend, workspace *manifest.Workspace, workspacePath string) error {
+	path := strings.TrimSpace(workspacePath)
+	if path == "" {
+		return nil
+	}
+	if absPath, err := filepath.Abs(path); err == nil {
+		path = absPath
+	}
+
+	actions := make([]backend.Action, 0, len(workspace.Sessions))
+	for _, session := range workspace.Sessions {
+		if strings.TrimSpace(session.Name) == "" {
+			continue
+		}
+		actions = append(actions, backend.SetSessionOptionAction{
+			Session: session.Name,
+			Key:     backend.WorkspacePathOption,
+			Value:   path,
+		})
+	}
+	if len(actions) == 0 {
+		return nil
+	}
+	if err := b.Apply(actions); err != nil {
+		return err
+	}
+	return nil
 }
 
 func printDryRun(b backend.Backend, p *plan.Plan) {

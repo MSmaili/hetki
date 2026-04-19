@@ -107,6 +107,57 @@ func TestServiceRunFailsWhenBackendStateQueryFails(t *testing.T) {
 	assert.Zero(t, stub.applyCalls)
 }
 
+func TestServiceRunStampsWorkspacePathWhenPlanIsEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	workspace := "sessions:\n  - name: dev\n    windows:\n      - name: editor\n        path: " + filepath.ToSlash(tmpDir) + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".hetki.yaml"), []byte(workspace), 0644))
+
+	previousWD, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(previousWD))
+	})
+
+	stub := &stubBackend{queryResult: backend.StateResult{
+		Sessions: []backend.Session{{
+			Name: "dev",
+			Windows: []backend.Window{{
+				Name: "editor",
+				Path: filepath.ToSlash(tmpDir),
+			}},
+		}},
+	}}
+	service := NewService(func(...string) (backend.Backend, error) { return stub, nil })
+
+	require.NoError(t, service.Run(Options{}))
+	assert.Equal(t, 1, stub.applyCalls)
+	assert.Equal(t, 1, stub.attachCalls)
+	expectedPath, err := canonicalPath(filepath.Join(tmpDir, ".hetki.yaml"))
+	require.NoError(t, err)
+	if assert.Len(t, stub.lastActions, 1) {
+		action, ok := stub.lastActions[0].(backend.SetSessionOptionAction)
+		if assert.True(t, ok) {
+			actualPath, err := canonicalPath(action.Value)
+			require.NoError(t, err)
+			assert.Equal(t, "dev", action.Session)
+			assert.Equal(t, backend.WorkspacePathOption, action.Key)
+			assert.Equal(t, expectedPath, actualPath)
+		}
+	}
+}
+
+func canonicalPath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return resolved, nil
+	}
+	return abs, nil
+}
+
 func TestToBackendActionsMapsPlannerActions(t *testing.T) {
 	actions := []plan.Action{
 		plan.CreateSessionAction{Name: "dev", WindowName: "editor", Path: "~/code"},
