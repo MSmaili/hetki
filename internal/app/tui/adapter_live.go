@@ -41,6 +41,96 @@ func (a LiveAdapter) Execute(ctx context.Context, intent contracts.Intent) (cont
 			return contracts.ActionResult{}, fmt.Errorf("switch to %q: %w", target, err)
 		}
 		return contracts.ActionResult{Message: "switched to " + target, NeedsRefresh: true}, nil
+	case contracts.IntentCreateSession:
+		name := payloadValue(intent.Payload, "name")
+		if name == "" {
+			return contracts.ActionResult{}, fmt.Errorf("session name is required")
+		}
+
+		actions := []backend.Action{backend.CreateSessionAction{Name: name}}
+		workspacePath, err := activeWorkspacePath(b)
+		if err != nil {
+			return contracts.ActionResult{}, err
+		}
+		if workspacePath != "" {
+			actions = append(actions, backend.SetSessionOptionAction{
+				Session: name,
+				Key:     backend.WorkspacePathOption,
+				Value:   workspacePath,
+			})
+		}
+
+		if err := b.Apply(actions); err != nil {
+			return contracts.ActionResult{}, fmt.Errorf("create session %q: %w", name, err)
+		}
+
+		message := "created session " + name
+		if workspacePath != "" {
+			message += " (workspace linked)"
+		}
+		return contracts.ActionResult{Message: message, NeedsRefresh: true}, nil
+	case contracts.IntentCreateWindow:
+		session := payloadValue(intent.Payload, "session")
+		if session == "" {
+			session = sessionFromTarget(intent.Target)
+		}
+		if session == "" {
+			return contracts.ActionResult{}, fmt.Errorf("session target is required")
+		}
+
+		name := payloadValue(intent.Payload, "name")
+		if name == "" {
+			return contracts.ActionResult{}, fmt.Errorf("window name is required")
+		}
+
+		if err := b.Apply([]backend.Action{backend.CreateWindowAction{Session: session, Name: name}}); err != nil {
+			return contracts.ActionResult{}, fmt.Errorf("create window %q in %q: %w", name, session, err)
+		}
+		return contracts.ActionResult{Message: "created window " + session + ":" + name, NeedsRefresh: true}, nil
+	case contracts.IntentRenameSession:
+		current := sessionFromTarget(intent.Target)
+		if current == "" {
+			return contracts.ActionResult{}, fmt.Errorf("session target is required")
+		}
+		name := payloadValue(intent.Payload, "name")
+		if name == "" {
+			return contracts.ActionResult{}, fmt.Errorf("new session name is required")
+		}
+		if err := b.Apply([]backend.Action{backend.RenameSessionAction{Current: current, New: name}}); err != nil {
+			return contracts.ActionResult{}, fmt.Errorf("rename session %q to %q: %w", current, name, err)
+		}
+		return contracts.ActionResult{Message: "renamed session " + current + " -> " + name, NeedsRefresh: true}, nil
+	case contracts.IntentRenameWindow:
+		session, window, err := sessionWindowFromTarget(intent.Target)
+		if err != nil {
+			return contracts.ActionResult{}, err
+		}
+		name := payloadValue(intent.Payload, "name")
+		if name == "" {
+			return contracts.ActionResult{}, fmt.Errorf("new window name is required")
+		}
+		if err := b.Apply([]backend.Action{backend.RenameWindowAction{Session: session, Window: window, New: name}}); err != nil {
+			return contracts.ActionResult{}, fmt.Errorf("rename window %q in %q to %q: %w", window, session, name, err)
+		}
+		return contracts.ActionResult{Message: "renamed window " + session + ":" + window + " -> " + name, NeedsRefresh: true}, nil
+	case contracts.IntentDeleteSession:
+		session := sessionFromTarget(intent.Target)
+		if session == "" {
+			return contracts.ActionResult{}, fmt.Errorf("session target is required")
+		}
+		if err := b.Apply([]backend.Action{backend.KillSessionAction{Name: session}}); err != nil {
+			return contracts.ActionResult{}, fmt.Errorf("delete session %q: %w", session, err)
+		}
+		return contracts.ActionResult{Message: "deleted session " + session, NeedsRefresh: true}, nil
+	case contracts.IntentDeleteWindow:
+		session, window, err := sessionWindowFromTarget(intent.Target)
+		if err != nil {
+			return contracts.ActionResult{}, err
+		}
+		if err := b.Apply([]backend.Action{backend.KillWindowAction{Session: session, Window: window}}); err != nil {
+			return contracts.ActionResult{}, fmt.Errorf("delete window %q in %q: %w", window, session, err)
+		}
+		return contracts.ActionResult{Message: "deleted window " + session + ":" + window, NeedsRefresh: true}, nil
 	default:
 		return contracts.ActionResult{}, fmt.Errorf("intent %q is not implemented yet", intent.Type)
 	}
@@ -71,8 +161,14 @@ func (a LiveAdapter) snapshotFromBackend(ctx context.Context) (contracts.Snapsho
 			"workspace": activeWorkspace,
 		},
 		Capabilities: map[contracts.Capability]bool{
-			contracts.CapabilityRefresh: true,
-			contracts.CapabilitySwitch:  true,
+			contracts.CapabilityRefresh:       true,
+			contracts.CapabilitySwitch:        true,
+			contracts.CapabilityCreateSession: true,
+			contracts.CapabilityCreateWindow:  true,
+			contracts.CapabilityRenameSession: true,
+			contracts.CapabilityRenameWindow:  true,
+			contracts.CapabilityDeleteSession: true,
+			contracts.CapabilityDeleteWindow:  true,
 		},
 	}
 
@@ -141,4 +237,45 @@ func workspacePathForSession(sessions []backend.Session, sessionName string) str
 		}
 	}
 	return ""
+}
+
+func activeWorkspacePath(b backend.Backend) (string, error) {
+	state, err := b.QueryState()
+	if err != nil {
+		return "", fmt.Errorf("failed to query sessions for workspace inheritance: %w", err)
+	}
+	return strings.TrimSpace(workspacePathForSession(state.Sessions, state.Active.Session)), nil
+}
+
+func payloadValue(payload map[string]string, key string) string {
+	if payload == nil {
+		return ""
+	}
+	return strings.TrimSpace(payload[key])
+}
+
+func sessionFromTarget(target string) string {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return ""
+	}
+	session, _, hasWindow := strings.Cut(target, ":")
+	if hasWindow {
+		return strings.TrimSpace(session)
+	}
+	return target
+}
+
+func sessionWindowFromTarget(target string) (string, string, error) {
+	target = strings.TrimSpace(target)
+	session, rest, hasWindow := strings.Cut(target, ":")
+	if !hasWindow || strings.TrimSpace(session) == "" || strings.TrimSpace(rest) == "" {
+		return "", "", fmt.Errorf("window target must be in session:window format")
+	}
+	window, _, _ := strings.Cut(rest, ".")
+	window = strings.TrimSpace(window)
+	if window == "" {
+		return "", "", fmt.Errorf("window target must include a window reference")
+	}
+	return strings.TrimSpace(session), window, nil
 }

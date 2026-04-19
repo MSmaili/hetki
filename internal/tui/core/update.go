@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/MSmaili/hetki/internal/tui/contracts"
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,6 +22,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case actionResultMsg:
 		m.busy = false
+		pending := m.pending
+		m.pending = nil
 		if msg.err != nil {
 			m.err = msg.err
 			m.status = msg.err.Error()
@@ -35,16 +39,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				selectedID = selected.Node.ID
 			}
 			m.snapshot = *msg.result.Snapshot
-			m.allRows = flatten(m.snapshot.Nodes)
+			if m.expanded == nil {
+				m.expanded = defaultExpanded(m.snapshot.Nodes, m.snapshot.ActiveNodeID)
+			}
+			markActivePathExpanded(m.snapshot.Nodes, m.snapshot.ActiveNodeID, m.expanded)
 			m.applyFilter()
 			m = m.reflow()
-			if selectedID != "" {
-				for i := range m.rows {
-					if m.rows[i].Node.ID == selectedID {
-						m.cursor = i
-						break
-					}
-				}
+			preferredID := preferredSelectionID(m.snapshot, pending, selectedID)
+			if idx := findRowIndexByID(m.rows, preferredID); idx >= 0 {
+				m.cursor = idx
+			} else if idx := findRowIndexByID(m.rows, selectedID); idx >= 0 {
+				m.cursor = idx
 			}
 			m = m.reflow()
 		}
@@ -54,45 +59,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+		if matches(msg, m.keys.Help) {
+			m.helpOpen = !m.helpOpen
+			if m.helpOpen {
+				m.status = "help"
+			} else {
+				m.status = "ready"
+			}
+			return m, nil
+		}
+
 		if m.busy {
 			return m, nil
 		}
 
-		if m.mode == modeFilter {
-			switch {
-			case matches(msg, m.keys.Cancel):
-				m.mode = modeBrowse
-				m.status = "filter canceled"
-				return m, nil
-			case matches(msg, m.keys.Confirm):
-				m.mode = modeBrowse
-				m.status = "filter applied"
-				return m, nil
-			case matches(msg, m.keys.Backspace):
-				if len(m.filter) > 0 {
-					r := []rune(m.filter)
-					m.filter = string(r[:len(r)-1])
-					m.applyFilter()
-					m = m.reflow()
-				}
-				return m, nil
-			case matches(msg, m.keys.ClearFilter):
-				m.filter = ""
-				m.applyFilter()
-				m = m.reflow()
-				m.mode = modeBrowse
-				m.status = "filter cleared"
-				return m, nil
+		if m.helpOpen {
+			if matches(msg, m.keys.Cancel) || matches(msg, m.keys.Confirm) {
+				m.helpOpen = false
+				m.status = "ready"
 			}
-
-			if msg.Type == tea.KeyRunes {
-				m.filter += string(msg.Runes)
-				m.applyFilter()
-				m = m.reflow()
-				return m, nil
-			}
-
 			return m, nil
+		}
+
+		switch m.mode {
+		case modeFilter:
+			return m.updateFilterMode(msg)
+		case modeInput:
+			return m.updateInputMode(msg)
+		case modeConfirm:
+			return m.updateConfirmMode(msg)
 		}
 
 		switch {
@@ -104,6 +99,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursor = clampCursor(m.cursor+1, len(m.rows))
 			m = m.reflow()
 			return m, nil
+		case matches(msg, m.keys.Top):
+			m.cursor = clampCursor(0, len(m.rows))
+			m = m.reflow()
+			return m, nil
+		case exactMatches(msg, m.keys.Bottom):
+			m.cursor = clampCursor(len(m.rows)-1, len(m.rows))
+			m = m.reflow()
+			return m, nil
 		case matches(msg, m.keys.PageUp):
 			m.cursor = clampCursor(m.cursor-m.listH, len(m.rows))
 			m = m.reflow()
@@ -111,6 +114,48 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case matches(msg, m.keys.PageDown):
 			m.cursor = clampCursor(m.cursor+m.listH, len(m.rows))
 			m = m.reflow()
+			return m, nil
+		case exactMatches(msg, m.keys.ExpandAll):
+			if m.expandAll() {
+				m.status = "expanded all"
+			} else {
+				m.status = "expand unavailable while filtering"
+			}
+			return m, nil
+		case exactMatches(msg, m.keys.CollapseAll):
+			if m.collapseAll() {
+				m.status = "collapsed all"
+			} else {
+				m.status = "collapse unavailable while filtering"
+			}
+			return m, nil
+		case exactMatches(msg, m.keys.NextMatch):
+			if m.jumpMatch(true) {
+				m.status = matchJumpStatus(m)
+			} else {
+				m.status = "no matches"
+			}
+			return m, nil
+		case exactMatches(msg, m.keys.PrevMatch):
+			if m.jumpMatch(false) {
+				m.status = matchJumpStatus(m)
+			} else {
+				m.status = "no matches"
+			}
+			return m, nil
+		case matches(msg, m.keys.Expand):
+			if m.toggleCurrentRow(true) {
+				m.status = "expanded"
+			} else {
+				m.status = "nothing to expand"
+			}
+			return m, nil
+		case matches(msg, m.keys.Collapse):
+			if m.toggleCurrentRow(false) {
+				m.status = "collapsed"
+			} else {
+				m.status = "nothing to collapse"
+			}
 			return m, nil
 		case matches(msg, m.keys.Search):
 			m.mode = modeFilter
@@ -122,6 +167,46 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.reflow()
 			m.status = "filter cleared"
 			return m, nil
+		case matches(msg, m.keys.CreateSession):
+			if !m.hasCapability(contracts.CapabilityCreateSession) {
+				m.status = "create session is not available"
+				return m, nil
+			}
+			m.mode = modeInput
+			m.input = inputState{
+				Title:        "CREATE SESSION",
+				Prompt:       "Session name",
+				IntentType:   contracts.IntentCreateSession,
+				SubmitStatus: "creating session...",
+			}
+			m.status = "enter session name"
+			return m.reflow(), nil
+		case matches(msg, m.keys.CreateWindow):
+			if !m.hasCapability(contracts.CapabilityCreateWindow) {
+				m.status = "create window is not available"
+				return m, nil
+			}
+			session := m.selectedSessionTarget()
+			if session == "" {
+				m.status = "select a session, window, or pane first"
+				return m, nil
+			}
+			m.mode = modeInput
+			m.input = inputState{
+				Title:      "CREATE WINDOW",
+				Prompt:     "Window name",
+				IntentType: contracts.IntentCreateWindow,
+				Payload: map[string]string{
+					"session": session,
+				},
+				SubmitStatus: "creating window...",
+			}
+			m.status = "enter window name"
+			return m.reflow(), nil
+		case matches(msg, m.keys.Rename):
+			return m.beginRenameFlow()
+		case matches(msg, m.keys.Delete):
+			return m.beginDeleteFlow()
 		case matches(msg, m.keys.Refresh):
 			if !m.hasCapability(contracts.CapabilityRefresh) {
 				m.status = "refresh is not available"
@@ -154,6 +239,305 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m model) updateFilterMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case matches(msg, m.keys.Cancel):
+		m.mode = modeBrowse
+		m.status = "filter canceled"
+		return m, nil
+	case matches(msg, m.keys.Confirm):
+		m.mode = modeBrowse
+		m.status = "filter applied"
+		return m, nil
+	case matches(msg, m.keys.Backspace):
+		if len(m.filter) > 0 {
+			r := []rune(m.filter)
+			m.filter = string(r[:len(r)-1])
+			m.applyFilter()
+			m = m.reflow()
+		}
+		return m, nil
+	case matches(msg, m.keys.DeleteWord):
+		m.filter = deleteLastWord(m.filter)
+		m.applyFilter()
+		m = m.reflow()
+		if _, total := m.filterMatchPosition(); total > 0 {
+			m.status = matchJumpStatus(m)
+		} else if strings.TrimSpace(m.filter) == "" {
+			m.status = "type to filter, enter apply, esc cancel"
+		} else {
+			m.status = "no matches"
+		}
+		return m, nil
+	case matches(msg, m.keys.DeleteToStart):
+		m.filter = ""
+		m.applyFilter()
+		m = m.reflow()
+		m.status = "type to filter, enter apply, esc cancel"
+		return m, nil
+	case matches(msg, m.keys.ClearFilter):
+		m.filter = ""
+		m.applyFilter()
+		m.mode = modeBrowse
+		m.status = "filter cleared"
+		return m.reflow(), nil
+	}
+
+	if msg.Type == tea.KeyRunes {
+		m.filter += string(msg.Runes)
+		m.applyFilter()
+		if _, total := m.filterMatchPosition(); total > 0 {
+			m.status = matchJumpStatus(m)
+		} else {
+			m.status = "no matches"
+		}
+		return m.reflow(), nil
+	}
+
+	return m, nil
+}
+
+func (m model) updateInputMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case matches(msg, m.keys.Cancel):
+		m.mode = modeBrowse
+		m.input = inputState{}
+		m.status = "action canceled"
+		return m.reflow(), nil
+	case matches(msg, m.keys.Confirm):
+		value := strings.TrimSpace(m.input.Value)
+		if value == "" {
+			m.status = "value cannot be empty"
+			return m, nil
+		}
+
+		intent := contracts.Intent{
+			Type:    m.input.IntentType,
+			Target:  m.input.Target,
+			Payload: clonePayload(m.input.Payload),
+		}
+		if intent.Payload == nil {
+			intent.Payload = make(map[string]string)
+		}
+		intent.Payload["name"] = value
+
+		m.mode = modeBrowse
+		m.busy = true
+		m.pending = cloneIntent(intent)
+		if strings.TrimSpace(m.input.SubmitStatus) != "" {
+			m.status = m.input.SubmitStatus
+		} else {
+			m.status = "running action..."
+		}
+		m.input = inputState{}
+		return m.reflow(), runIntent(m.dispatch, intent)
+	case matches(msg, m.keys.Backspace):
+		if len(m.input.Value) == 0 {
+			return m, nil
+		}
+		r := []rune(m.input.Value)
+		m.input.Value = string(r[:len(r)-1])
+		return m, nil
+	case matches(msg, m.keys.DeleteWord):
+		m.input.Value = deleteLastWord(m.input.Value)
+		return m, nil
+	case matches(msg, m.keys.DeleteToStart):
+		m.input.Value = ""
+		return m, nil
+	}
+
+	if msg.Type == tea.KeyRunes {
+		m.input.Value += string(msg.Runes)
+	}
+
+	return m, nil
+}
+
+func (m model) updateConfirmMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := strings.ToLower(strings.TrimSpace(msg.String()))
+	switch {
+	case matches(msg, m.keys.Cancel), key == "n":
+		m.mode = modeBrowse
+		m.confirm = confirmState{}
+		m.status = "action canceled"
+		return m.reflow(), nil
+	case matches(msg, m.keys.Confirm), key == "y":
+		intent := m.confirm.Intent
+		status := strings.TrimSpace(m.confirm.SubmitStatus)
+		if status == "" {
+			status = "running action..."
+		}
+		m.mode = modeBrowse
+		m.confirm = confirmState{}
+		m.busy = true
+		m.pending = cloneIntent(intent)
+		m.status = status
+		return m.reflow(), runIntent(m.dispatch, intent)
+	}
+	return m, nil
+}
+
+func (m model) beginDeleteFlow() (tea.Model, tea.Cmd) {
+	if len(m.rows) == 0 {
+		m.status = "no selection"
+		return m, nil
+	}
+	selected, ok := m.selectedRow()
+	if !ok {
+		m.status = "no selection"
+		return m, nil
+	}
+
+	switch selected.Node.Kind {
+	case contracts.NodeKindSession:
+		if !m.hasCapability(contracts.CapabilityDeleteSession) {
+			m.status = "delete session is not available"
+			return m, nil
+		}
+		m.mode = modeConfirm
+		m.confirm = confirmState{
+			Title: "DELETE SESSION",
+			Body:  fmt.Sprintf("Delete session %q?", selected.Node.Label),
+			Intent: contracts.Intent{
+				Type:   contracts.IntentDeleteSession,
+				Target: selected.Node.Target,
+			},
+			SubmitStatus: "deleting session...",
+		}
+		m.status = "confirm delete"
+		return m.reflow(), nil
+	case contracts.NodeKindWindow:
+		if !m.hasCapability(contracts.CapabilityDeleteWindow) {
+			m.status = "delete window is not available"
+			return m, nil
+		}
+		m.mode = modeConfirm
+		m.confirm = confirmState{
+			Title: "DELETE WINDOW",
+			Body:  fmt.Sprintf("Delete window %q?", selected.Node.Label),
+			Intent: contracts.Intent{
+				Type:   contracts.IntentDeleteWindow,
+				Target: selected.Node.Target,
+			},
+			SubmitStatus: "deleting window...",
+		}
+		m.status = "confirm delete"
+		return m.reflow(), nil
+	default:
+		m.status = "delete supports sessions/windows only"
+		return m, nil
+	}
+}
+
+func (m model) beginRenameFlow() (tea.Model, tea.Cmd) {
+	selected, ok := m.selectedRow()
+	if !ok {
+		m.status = "no selection"
+		return m, nil
+	}
+
+	switch selected.Node.Kind {
+	case contracts.NodeKindSession:
+		if !m.hasCapability(contracts.CapabilityRenameSession) {
+			m.status = "rename session is not available"
+			return m, nil
+		}
+		m.mode = modeInput
+		m.input = inputState{
+			Title:        "RENAME SESSION",
+			Prompt:       "Session name",
+			IntentType:   contracts.IntentRenameSession,
+			Target:       selected.Node.Target,
+			Value:        renameInitialValue(selected),
+			SubmitStatus: "renaming session...",
+		}
+		m.status = "enter new session name"
+		return m.reflow(), nil
+	case contracts.NodeKindWindow:
+		if !m.hasCapability(contracts.CapabilityRenameWindow) {
+			m.status = "rename window is not available"
+			return m, nil
+		}
+		m.mode = modeInput
+		m.input = inputState{
+			Title:        "RENAME WINDOW",
+			Prompt:       "Window name",
+			IntentType:   contracts.IntentRenameWindow,
+			Target:       selected.Node.Target,
+			Value:        renameInitialValue(selected),
+			SubmitStatus: "renaming window...",
+		}
+		m.status = "enter new window name"
+		return m.reflow(), nil
+	default:
+		m.status = "rename supports sessions/windows only"
+		return m, nil
+	}
+}
+
+func (m model) selectedSessionTarget() string {
+	selected, ok := m.selectedRow()
+	if !ok {
+		return ""
+	}
+	return sessionFromNodeTarget(selected.Node.Target)
+}
+
+func sessionFromNodeTarget(target string) string {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return ""
+	}
+	session, _, hasWindow := strings.Cut(target, ":")
+	if hasWindow {
+		return strings.TrimSpace(session)
+	}
+	return target
+}
+
+func clonePayload(payload map[string]string) map[string]string {
+	if payload == nil {
+		return nil
+	}
+	cloned := make(map[string]string, len(payload))
+	for k, v := range payload {
+		cloned[k] = v
+	}
+	return cloned
+}
+
+func renameInitialValue(selected row) string {
+	label := strings.TrimSpace(selected.Node.Label)
+	if selected.Node.Kind != contracts.NodeKindWindow {
+		return label
+	}
+	parts := strings.Fields(label)
+	if len(parts) <= 1 {
+		return label
+	}
+	return strings.Join(parts[1:], " ")
+}
+
+func matchJumpStatus(m model) string {
+	current, total := m.filterMatchPosition()
+	if total == 0 {
+		return "no matches"
+	}
+	return fmt.Sprintf("match %d/%d", current, total)
+}
+
+func deleteLastWord(value string) string {
+	r := []rune(value)
+	end := len(r)
+	for end > 0 && (r[end-1] == ' ' || r[end-1] == '\t') {
+		end--
+	}
+	for end > 0 && r[end-1] != ' ' && r[end-1] != '\t' {
+		end--
+	}
+	return string(r[:end])
 }
 
 func runIntent(dispatch DispatchFunc, intent contracts.Intent) tea.Cmd {

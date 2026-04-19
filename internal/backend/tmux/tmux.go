@@ -200,6 +200,10 @@ func (b *TmuxBackend) mapAction(a backend.Action, windowIndex map[string]int) Ac
 	case backend.CreateWindowAction:
 		windowIndex[action.Session]++
 		return CreateWindow{Session: action.Session, Name: action.Name, Path: action.Path}
+	case backend.RenameSessionAction:
+		return RenameSession{Target: action.Current, Name: action.New}
+	case backend.RenameWindowAction:
+		return RenameWindow{Target: fmt.Sprintf("%s:%s", action.Session, action.Window), Name: action.New}
 	case backend.SplitPaneAction:
 		return SplitPane{Target: fmt.Sprintf("%s:%d", action.Session, windowIndex[action.Session]), Path: action.Path}
 	case backend.SendKeysAction:

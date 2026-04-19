@@ -28,6 +28,16 @@ func TestAction_Args(t *testing.T) {
 			want:   []string{"new-window", "-t", "dev:", "-n", "editor", "-c", "~/code"},
 		},
 		{
+			name:   "rename session",
+			action: RenameSession{Target: "dev", Name: "core"},
+			want:   []string{"rename-session", "-t", "dev", "core"},
+		},
+		{
+			name:   "rename window",
+			action: RenameWindow{Target: "dev:1", Name: "logs"},
+			want:   []string{"rename-window", "-t", "dev:1", "logs"},
+		},
+		{
 			name:   "split pane",
 			action: SplitPane{Target: "dev:editor", Path: "~/code"},
 			want:   []string{"split-window", "-t", "dev:editor", "-c", "~/code"},

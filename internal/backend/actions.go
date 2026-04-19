@@ -41,6 +41,39 @@ func (a CreateWindowAction) Validate() error {
 	return nil
 }
 
+type RenameSessionAction struct {
+	Current string
+	New     string
+}
+
+func (a RenameSessionAction) Comment() string {
+	return fmt.Sprintf("# Rename session: %s -> %s", a.Current, a.New)
+}
+
+func (a RenameSessionAction) Validate() error {
+	if a.Current == "" || a.New == "" {
+		return errors.New("rename session current and new names cannot be empty")
+	}
+	return nil
+}
+
+type RenameWindowAction struct {
+	Session string
+	Window  string
+	New     string
+}
+
+func (a RenameWindowAction) Comment() string {
+	return fmt.Sprintf("# Rename window: %s:%s -> %s", a.Session, a.Window, a.New)
+}
+
+func (a RenameWindowAction) Validate() error {
+	if a.Session == "" || a.Window == "" || a.New == "" {
+		return errors.New("rename window session, window, and new name cannot be empty")
+	}
+	return nil
+}
+
 type SplitPaneAction struct {
 	Session string
 	Window  string

@@ -35,6 +35,24 @@ func (a CreateWindow) Args() []string {
 	return args
 }
 
+type RenameSession struct {
+	Target string
+	Name   string
+}
+
+func (a RenameSession) Args() []string {
+	return []string{"rename-session", "-t", a.Target, a.Name}
+}
+
+type RenameWindow struct {
+	Target string
+	Name   string
+}
+
+func (a RenameWindow) Args() []string {
+	return []string{"rename-window", "-t", a.Target, a.Name}
+}
+
 type SplitPane struct {
 	Target string
 	Path   string
