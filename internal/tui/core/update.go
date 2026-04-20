@@ -259,9 +259,24 @@ func (m model) updateFilterMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = statusFilterCanceled
 		return m, nil
 	case key.Matches(msg, m.keys.Confirm):
+		if !m.hasCapability(contracts.CapabilitySwitch) {
+			m.mode = modeBrowse
+			m.status = statusFilterApplied
+			return m, nil
+		}
+		selected, ok := m.selectedRow()
+		if !ok || selected.Node.Target == "" {
+			m.mode = modeBrowse
+			m.status = statusFilterApplied
+			return m, nil
+		}
 		m.mode = modeBrowse
-		m.status = statusFilterApplied
-		return m, nil
+		m.busy = true
+		m.status = statusSwitching
+		return m, runIntent(m.dispatch, contracts.Intent{
+			Type:   contracts.IntentSwitch,
+			Target: selected.Node.Target,
+		})
 	case msg.String() == "up", msg.String() == "ctrl+p":
 		m.cursor = clampCursor(m.cursor-1, len(m.rows))
 		return m.reflow(), nil

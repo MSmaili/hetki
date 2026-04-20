@@ -38,13 +38,6 @@ func (m model) View() tea.View {
 		var dataLines int
 		for i := start; i < end && dataLines < m.listH; i++ {
 			r := m.rows[i]
-			if r.Depth == 0 && r.Node.Kind == contracts.NodeKindSession && len(contentLines) > 3 {
-				dataLines++
-				if dataLines > m.listH {
-					break
-				}
-				contentLines = append(contentLines, t.sectionLine.Render(strings.Repeat("╌", innerW)))
-			}
 			dataLines++
 			if dataLines > m.listH {
 				break
@@ -60,10 +53,10 @@ func (m model) View() tea.View {
 			}
 
 			selected := i == m.cursor
-			line := m.renderRowLine(r, cursor, active, innerW, selected)
-			line = m.withSessionCount(r, line, innerW)
-			line = m.styleRowLine(r, selected, line)
-			contentLines = append(contentLines, truncateToWidth(line, innerW))
+			line := m.renderRowLine(r, cursor, active, selected)
+			line = truncateWidth(line, innerW)
+			line = m.styleRowLine(r, selected, line, innerW)
+			contentLines = append(contentLines, line)
 		}
 	}
 
@@ -72,21 +65,16 @@ func (m model) View() tea.View {
 		statusText = strings.ToUpper(m.modeLabel())
 	}
 	if m.busy {
-		statusText += " | busy"
-	}
-	if m.mode == modeFilter {
-		statusText += " | filter=" + m.filter
-		if current, total := m.filterMatchPosition(); total > 0 {
-			statusText += fmt.Sprintf(" (%d/%d)", current, total)
-		}
-	}
-	if m.err != nil {
-		contentLines = append(contentLines, t.err.Render(truncateWidth(statusText, innerW)))
-	} else {
-		contentLines = append(contentLines, t.status.Render(truncateWidth(statusText, innerW)))
+		statusText += " · busy"
 	}
 
-	contentLines = append(contentLines, t.help.Render(truncateWidth(compositeBottomLine(m, innerW), innerW)))
+	var statusStyle lipgloss.Style
+	if m.err != nil {
+		statusStyle = t.err
+	} else {
+		statusStyle = t.status
+	}
+	contentLines = append(contentLines, m.renderBottomBar(innerW, statusText, statusStyle))
 
 	content := strings.Join(contentLines, "\n")
 
@@ -164,28 +152,6 @@ func (m model) topBar(width int) string {
 	return m.theme.searchBox.Render(prompt)
 }
 
-func (m model) lineWithTag(left, tag string, width int) string {
-	left = truncateWidth(left, width)
-	if strings.TrimSpace(tag) == "" {
-		return left
-	}
-	tag = m.theme.selectedHint.Render(tag)
-	tagW := lipgloss.Width(tag)
-	if tagW+2 >= width {
-		return truncateWidth(left, width)
-	}
-	leftW := lipgloss.Width(left)
-	if leftW+tagW+1 >= width {
-		left = truncateWidth(left, width-tagW-1)
-		leftW = lipgloss.Width(left)
-	}
-	padding := width - leftW - tagW
-	if padding < 1 {
-		padding = 1
-	}
-	return left + strings.Repeat(" ", padding) + tag
-}
-
 func branchGlyph(r row) string {
 	if !r.Branch {
 		return "  "
@@ -196,29 +162,22 @@ func branchGlyph(r row) string {
 	return "\uf0da " // nerd font: fa-caret-right (collapsed)
 }
 
-func (m model) renderRowLine(r row, cursor, active string, width int, selected bool) string {
-	left := fmt.Sprintf("%s %s", cursor, m.decoratedLabel(r, selected))
-	return m.lineWithTag(left, active, width)
+func (m model) renderRowLine(r row, cursor, active string, selected bool) string {
+	marker := "  "
+	if strings.TrimSpace(active) != "" {
+		marker = active + " "
+	}
+	label := m.decoratedLabel(r, selected)
+	if count := sessionWindowCount(r); count > 0 {
+		label += " " + m.theme.meta.Render(fmt.Sprintf("(%d)", count))
+	}
+	return fmt.Sprintf("%s %s%s", cursor, marker, label)
 }
 
-func (m model) withSessionCount(r row, line string, width int) string {
-	count := sessionWindowCount(r)
-	if count == 0 {
-		return line
-	}
-	suffix := fmt.Sprintf("%d", count)
-	suffixW := lipgloss.Width(suffix)
-	lineW := lipgloss.Width(line)
-	if lineW+suffixW+1 >= width {
-		return line
-	}
-	return line + strings.Repeat(" ", width-lineW-suffixW) + m.theme.meta.Render(suffix)
-}
-
-func (m model) styleRowLine(r row, selected bool, line string) string {
+func (m model) styleRowLine(r row, selected bool, line string, width int) string {
 	t := m.theme
 	if selected {
-		return t.selectedRow.Render(line)
+		return t.selectedRow.Width(width).Render(line)
 	}
 	if r.Node.Kind == contracts.NodeKindSession {
 		return t.sessionRow.Render(line)
@@ -237,7 +196,7 @@ func sessionIcon() string {
 }
 
 func windowIcon() string {
-	return "\uf489" // nerd font: oct-terminal
+	return "\ueb14" // nerd font: codicon-window
 }
 
 func nodeIcon(r row) string {
@@ -261,7 +220,7 @@ func (m model) decoratedLabel(r row, selected bool) string {
 	if r.Depth == 0 {
 		return fmt.Sprintf("%s %s %s", branch, nodeIcon(r), label)
 	}
-	return fmt.Sprintf("%s%s %s", prefix, nodeIcon(r), label)
+	return fmt.Sprintf("  %s%s %s", prefix, nodeIcon(r), label)
 }
 
 func emptyStateText(m model) string {
@@ -271,27 +230,51 @@ func emptyStateText(m model) string {
 	return "no sessions found"
 }
 
-func compositeBottomLine(m model, lineWidth int) string {
-	position := "0/0"
-	if len(m.rows) > 0 {
-		position = fmt.Sprintf("%d/%d", m.cursor+1, len(m.rows))
-	}
-	ws := workspaceContext(m.snapshot.ContextBars)
+func (m model) renderBottomBar(width int, status string, statusStyle lipgloss.Style) string {
+	t := m.theme
+
+	// Right side: position/match counter + help hint.
 	right := "? help"
-	if ws == "" {
-		return position + "  " + right
+	if len(m.rows) > 0 {
+		right = fmt.Sprintf("%d/%d · %s", m.cursor+1, len(m.rows), right)
 	}
-	leftW := lipgloss.Width(position)
-	rightW := lipgloss.Width(right)
-	centerW := lipgloss.Width(ws)
-	available := lineWidth - leftW - rightW
-	if available < 1 {
-		available = 1
+	if m.mode == modeFilter {
+		if current, total := m.filterMatchPosition(); total > 0 {
+			right = fmt.Sprintf("match %d/%d · %s", current, total, right)
+		}
 	}
-	if leftW+centerW+rightW >= lineWidth {
-		return position + "  " + ws + "  " + right
+
+	// Center: workspace label if present.
+	center := workspaceContext(m.snapshot.ContextBars)
+
+	leftStyled := statusStyle.Render(status)
+	rightStyled := t.help.Render(right)
+	centerStyled := t.meta.Render(center)
+
+	leftW := lipgloss.Width(leftStyled)
+	rightW := lipgloss.Width(rightStyled)
+	centerW := lipgloss.Width(centerStyled)
+
+	// If everything doesn't fit, drop the center.
+	if leftW+centerW+rightW+4 > width {
+		centerStyled = ""
+		centerW = 0
 	}
-	gap := lineWidth - leftW - centerW - rightW
+	// If still doesn't fit, drop the center and truncate the status.
+	if leftW+rightW+2 > width {
+		leftStyled = statusStyle.Render(truncateWidth(status, width-rightW-2))
+		leftW = lipgloss.Width(leftStyled)
+	}
+
+	if centerW == 0 {
+		gap := width - leftW - rightW
+		if gap < 1 {
+			gap = 1
+		}
+		return leftStyled + strings.Repeat(" ", gap) + rightStyled
+	}
+
+	gap := width - leftW - centerW - rightW
 	leftGap := gap / 2
 	rightGap := gap - leftGap
 	if leftGap < 1 {
@@ -300,7 +283,7 @@ func compositeBottomLine(m model, lineWidth int) string {
 	if rightGap < 1 {
 		rightGap = 1
 	}
-	return position + strings.Repeat(" ", leftGap) + ws + strings.Repeat(" ", rightGap) + right
+	return leftStyled + strings.Repeat(" ", leftGap) + centerStyled + strings.Repeat(" ", rightGap) + rightStyled
 }
 
 func (m model) renderHelpOverlay(lineWidth int) string {

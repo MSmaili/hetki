@@ -87,8 +87,8 @@ func newModel(snapshot contracts.Snapshot, dispatch DispatchFunc) model {
 		dispatch: dispatch,
 		keys:     DefaultKeyMap(),
 		theme:    defaultTheme(),
-		mode:     modeBrowse,
-		status:   "ready",
+		mode:     modeFilter,
+		status:   statusFilterHint,
 		expanded: defaultExpanded(snapshot.Nodes, snapshot.ActiveNodeID),
 	}
 	m.applyFilter()
@@ -112,23 +112,9 @@ func clampCursor(cursor, size int) int {
 func (m model) reflow() model {
 	m.cursor = clampCursor(m.cursor, len(m.rows))
 	m.listH = m.availableListHeight()
-	effectiveRows := m.listH - countSeparatorsInRange(m.rows, m.offset, m.offset+m.listH)
-	if effectiveRows < 1 {
-		effectiveRows = 1
-	}
-	m.offset = clampOffset(m.offset, len(m.rows), effectiveRows)
-	m.offset = ensureCursorVisible(m.offset, m.cursor, len(m.rows), effectiveRows)
+	m.offset = clampOffset(m.offset, len(m.rows), m.listH)
+	m.offset = ensureCursorVisible(m.offset, m.cursor, len(m.rows), m.listH)
 	return m
-}
-
-func countSeparatorsInRange(rows []row, start, end int) int {
-	count := 0
-	for i := start; i < end && i < len(rows); i++ {
-		if rows[i].Depth == 0 && rows[i].Node.Kind == contracts.NodeKindSession && i > 0 {
-			count++
-		}
-	}
-	return count
 }
 
 func (m model) availableListHeight() int {
@@ -144,7 +130,7 @@ func (m model) availableListHeight() int {
 }
 
 func (m model) reservedLines() int {
-	reserved := 9
+	reserved := 8
 	if m.mode == modeInput || m.mode == modeConfirm {
 		reserved += 5
 	}
