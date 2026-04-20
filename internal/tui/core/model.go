@@ -11,8 +11,8 @@ import (
 
 type DispatchFunc func(context.Context, contracts.Intent) (contracts.ActionResult, error)
 
-func Run(initial contracts.Snapshot, dispatch DispatchFunc) error {
-	p := tea.NewProgram(newModel(initial, dispatch))
+func Run(ctx context.Context, initial contracts.Snapshot, dispatch DispatchFunc) error {
+	p := tea.NewProgram(newModel(initial, dispatch), tea.WithContext(ctx))
 	_, err := p.Run()
 	return err
 }

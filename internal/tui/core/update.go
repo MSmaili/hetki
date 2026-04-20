@@ -24,15 +24,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case actionResultMsg:
 		return m.handleActionResult(msg)
 	case tea.KeyPressMsg:
-		if key.Matches(msg, m.keys.Quit) {
+		// ctrl+c always quits, regardless of mode or overlay.
+		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
 
-		if key.Matches(msg, m.keys.Help) {
-			m.helpOpen = !m.helpOpen
-			if m.helpOpen {
-				m.status = statusHelp
-			} else {
+		// While the help overlay is open, only local keys close it.
+		// Don't let global Quit or Help toggles fire on their own; esc/enter/? close it.
+		if m.helpOpen {
+			if key.Matches(msg, m.keys.Cancel) || key.Matches(msg, m.keys.Confirm) || key.Matches(msg, m.keys.Help) {
+				m.helpOpen = false
 				m.status = statusReady
 			}
 			return m, nil
@@ -42,24 +43,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if m.helpOpen {
-			if key.Matches(msg, m.keys.Cancel) || key.Matches(msg, m.keys.Confirm) {
-				m.helpOpen = false
-				m.status = statusReady
-			}
+		// In modes that capture text input, do NOT honor the global Quit key (q).
+		// Filter/input modes get first crack; confirm/browse still see the global binds.
+		if m.mode == modeFilter {
+			return m.updateFilterMode(msg)
+		}
+		if m.mode == modeInput {
+			return m.updateInputMode(msg)
+		}
+
+		// Browse or confirm: global shortcuts are safe.
+		if key.Matches(msg, m.keys.Quit) {
+			return m, tea.Quit
+		}
+		if key.Matches(msg, m.keys.Help) {
+			m.helpOpen = true
+			m.status = statusHelp
 			return m, nil
 		}
 
-		switch m.mode {
-		case modeFilter:
-			return m.updateFilterMode(msg)
-		case modeInput:
-			return m.updateInputMode(msg)
-		case modeConfirm:
+		if m.mode == modeConfirm {
 			return m.updateConfirmMode(msg)
-		default:
-			return m.updateBrowseMode(msg)
 		}
+		return m.updateBrowseMode(msg)
 	}
 
 	return m, nil
@@ -77,6 +83,10 @@ func (m model) handleActionResult(msg actionResultMsg) (tea.Model, tea.Cmd) {
 	m.err = nil
 	if msg.result.Message != "" {
 		m.status = msg.result.Message
+	}
+	// A successful switch means we're done — let the user get to their session.
+	if pending != nil && pending.Type == contracts.IntentSwitch {
+		return m, tea.Quit
 	}
 	if msg.result.Snapshot != nil {
 		selectedID := ""
@@ -241,12 +251,14 @@ func (m model) updateBrowseMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.status = statusNotActionable
 			return m, nil
 		}
-		m.busy = true
-		m.status = statusSwitching
-		return m, runIntent(m.dispatch, contracts.Intent{
+		switchIntent := contracts.Intent{
 			Type:   contracts.IntentSwitch,
 			Target: selected.Node.Target,
-		})
+		}
+		m.busy = true
+		m.pending = cloneIntent(switchIntent)
+		m.status = statusSwitching
+		return m, runIntent(m.dispatch, switchIntent)
 	}
 
 	return m, nil
@@ -271,12 +283,14 @@ func (m model) updateFilterMode(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = modeBrowse
-		m.busy = true
-		m.status = statusSwitching
-		return m, runIntent(m.dispatch, contracts.Intent{
+		switchIntent := contracts.Intent{
 			Type:   contracts.IntentSwitch,
 			Target: selected.Node.Target,
-		})
+		}
+		m.busy = true
+		m.pending = cloneIntent(switchIntent)
+		m.status = statusSwitching
+		return m, runIntent(m.dispatch, switchIntent)
 	case msg.String() == "up", msg.String() == "ctrl+p":
 		m.cursor = clampCursor(m.cursor-1, len(m.rows))
 		return m.reflow(), nil

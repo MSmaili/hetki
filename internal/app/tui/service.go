@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/MSmaili/hetki/internal/backend"
 	"github.com/MSmaili/hetki/internal/tui/contracts"
 	"github.com/MSmaili/hetki/internal/tui/core"
@@ -21,7 +23,7 @@ type Executor interface {
 type Service struct {
 	Provider Provider
 	Executor Executor
-	RunUI    func(initial contracts.Snapshot, dispatch core.DispatchFunc) error
+	RunUI    func(ctx context.Context, initial contracts.Snapshot, dispatch core.DispatchFunc) error
 }
 
 func NewService(detectBackend func(...string) (backend.Backend, error)) Service {
@@ -75,5 +77,11 @@ func (s Service) Run(ctx context.Context) error {
 		return result, nil
 	}
 
-	return runUI(initial, dispatch)
+	if err := runUI(ctx, initial, dispatch); err != nil {
+		if errors.Is(err, tea.ErrProgramKilled) || errors.Is(err, tea.ErrInterrupted) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }

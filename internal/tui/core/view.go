@@ -27,13 +27,14 @@ func (m model) View() tea.View {
 	}
 
 	var contentLines []string
+	var rowLines []string
 
 	contentLines = append(contentLines, t.sectionLine.Render(strings.Repeat("─", innerW)))
 	contentLines = append(contentLines, truncateToWidth(m.topBar(innerW), innerW))
 	contentLines = append(contentLines, t.sectionLine.Render(strings.Repeat("─", innerW)))
 
 	if len(m.rows) == 0 {
-		contentLines = append(contentLines, t.meta.Render(truncateWidth(emptyStateText(m), innerW)))
+		rowLines = append(rowLines, t.meta.Render(truncateWidth(emptyStateText(m), innerW)))
 	} else {
 		var dataLines int
 		for i := start; i < end && dataLines < m.listH; i++ {
@@ -56,7 +57,7 @@ func (m model) View() tea.View {
 			line := m.renderRowLine(r, cursor, active, selected)
 			line = truncateWidth(line, innerW)
 			line = m.styleRowLine(r, selected, line, innerW)
-			contentLines = append(contentLines, line)
+			rowLines = append(rowLines, line)
 		}
 	}
 
@@ -74,9 +75,21 @@ func (m model) View() tea.View {
 	} else {
 		statusStyle = t.status
 	}
-	contentLines = append(contentLines, m.renderBottomBar(innerW, statusText, statusStyle))
+	bottomBar := m.renderBottomBar(innerW, statusText, statusStyle)
 
-	content := strings.Join(contentLines, "\n")
+	// Compose the view as three stacked blocks: header, middle (row list),
+	// and bottom bar. The middle region is padded to fill the available
+	// vertical space so the bottom bar sticks to the bottom.
+	header := strings.Join(contentLines, "\n")
+	middle := strings.Join(rowLines, "\n")
+	borderFrameV := t.appBorder.GetVerticalFrameSize()
+	middleH := m.height - borderFrameV - lipgloss.Height(header) - lipgloss.Height(bottomBar)
+	if middleH < 1 {
+		middleH = 1
+	}
+	middle = lipgloss.PlaceVertical(middleH, lipgloss.Top, middle)
+
+	content := lipgloss.JoinVertical(lipgloss.Left, header, middle, bottomBar)
 
 	rendered := t.appBorder.Width(lineWidth).Render(content)
 

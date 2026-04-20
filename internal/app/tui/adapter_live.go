@@ -11,21 +11,22 @@ import (
 
 type LiveAdapter struct {
 	DetectBackend func(...string) (backend.Backend, error)
+	cached        backend.Backend
 }
 
-func NewLiveAdapter(detectBackend func(...string) (backend.Backend, error)) LiveAdapter {
-	return LiveAdapter{DetectBackend: detectBackend}
+func NewLiveAdapter(detectBackend func(...string) (backend.Backend, error)) *LiveAdapter {
+	return &LiveAdapter{DetectBackend: detectBackend}
 }
 
-func (a LiveAdapter) Load(ctx context.Context) (contracts.Snapshot, error) {
+func (a *LiveAdapter) Load(ctx context.Context) (contracts.Snapshot, error) {
 	return a.snapshotFromBackend(ctx)
 }
 
-func (a LiveAdapter) Refresh(ctx context.Context) (contracts.Snapshot, error) {
+func (a *LiveAdapter) Refresh(ctx context.Context) (contracts.Snapshot, error) {
 	return a.snapshotFromBackend(ctx)
 }
 
-func (a LiveAdapter) Execute(ctx context.Context, intent contracts.Intent) (contracts.ActionResult, error) {
+func (a *LiveAdapter) Execute(ctx context.Context, intent contracts.Intent) (contracts.ActionResult, error) {
 	b, err := a.detectBackend()
 	if err != nil {
 		return contracts.ActionResult{}, fmt.Errorf("failed to detect backend: %w", err)
@@ -136,7 +137,7 @@ func (a LiveAdapter) Execute(ctx context.Context, intent contracts.Intent) (cont
 	}
 }
 
-func (a LiveAdapter) snapshotFromBackend(ctx context.Context) (contracts.Snapshot, error) {
+func (a *LiveAdapter) snapshotFromBackend(ctx context.Context) (contracts.Snapshot, error) {
 	b, err := a.detectBackend()
 	if err != nil {
 		return contracts.Snapshot{}, fmt.Errorf("failed to detect backend: %w", err)
@@ -206,11 +207,24 @@ func (a LiveAdapter) snapshotFromBackend(ctx context.Context) (contracts.Snapsho
 	return snapshot, nil
 }
 
-func (a LiveAdapter) detectBackend() (backend.Backend, error) {
-	if a.DetectBackend != nil {
-		return a.DetectBackend()
+func (a *LiveAdapter) detectBackend() (backend.Backend, error) {
+	if a.cached != nil {
+		return a.cached, nil
 	}
-	return backend.Detect()
+	var (
+		b   backend.Backend
+		err error
+	)
+	if a.DetectBackend != nil {
+		b, err = a.DetectBackend()
+	} else {
+		b, err = backend.Detect()
+	}
+	if err != nil {
+		return nil, err
+	}
+	a.cached = b
+	return b, nil
 }
 
 func buildActiveTarget(active backend.ActiveContext) string {
