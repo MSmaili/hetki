@@ -4,53 +4,21 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/MSmaili/hetki/internal/tui/contracts"
 )
 
-var (
-	metaStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-
-	searchBoxStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-
-	rowStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	sessionRowStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("224"))
-	windowRowStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	activeRowStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("181"))
-	selectedRowStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230")).Background(lipgloss.Color("60"))
-	selectedHintStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("181"))
-	railStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	statusStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("151"))
-	helpStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
-	errorStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("210")).Bold(true)
-	sectionLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
-	helpOverlayStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("240")).
-				Padding(0, 1)
-
-	appBorderStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("110")).
-			Padding(0, 2)
-
-	modalStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("110")).
-			Padding(0, 1)
-	modalTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("110"))
-	modalHintStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
-)
-
-func (m model) View() string {
-	m = m.reflow()
+func (m model) View() tea.View {
+	t := m.theme
 	lineWidth := m.width
 	if lineWidth <= 0 {
 		lineWidth = 100
 	}
 	lineWidth = max(48, lineWidth)
 
-	innerW := max(24, lineWidth-appBorderWidth())
+	borderFrameSize := t.appBorder.GetHorizontalFrameSize()
+	innerW := max(24, lineWidth-borderFrameSize)
 
 	start := m.offset
 	end := m.offset + m.listH
@@ -60,22 +28,22 @@ func (m model) View() string {
 
 	var contentLines []string
 
-	contentLines = append(contentLines, sectionLineStyle.Render(strings.Repeat("─", innerW)))
-	contentLines = append(contentLines, truncateToWidth(topBar(m, innerW), innerW))
-	contentLines = append(contentLines, sectionLineStyle.Render(strings.Repeat("─", innerW)))
+	contentLines = append(contentLines, t.sectionLine.Render(strings.Repeat("─", innerW)))
+	contentLines = append(contentLines, truncateToWidth(m.topBar(innerW), innerW))
+	contentLines = append(contentLines, t.sectionLine.Render(strings.Repeat("─", innerW)))
 
 	if len(m.rows) == 0 {
-		contentLines = append(contentLines, metaStyle.Render(truncateWidth(emptyStateText(m), innerW)))
+		contentLines = append(contentLines, t.meta.Render(truncateWidth(emptyStateText(m), innerW)))
 	} else {
 		var dataLines int
 		for i := start; i < end && dataLines < m.listH; i++ {
 			r := m.rows[i]
-			if r.Depth == 0 && r.Node.Kind == "session" && len(contentLines) > 3 {
+			if r.Depth == 0 && r.Node.Kind == contracts.NodeKindSession && len(contentLines) > 3 {
 				dataLines++
 				if dataLines > m.listH {
 					break
 				}
-				contentLines = append(contentLines, sectionLineStyle.Render(strings.Repeat("╌", innerW)))
+				contentLines = append(contentLines, t.sectionLine.Render(strings.Repeat("╌", innerW)))
 			}
 			dataLines++
 			if dataLines > m.listH {
@@ -92,9 +60,9 @@ func (m model) View() string {
 			}
 
 			selected := i == m.cursor
-			line := renderRowLine(r, cursor, active, innerW, selected)
-			line = withSessionCount(r, line, innerW)
-			line = styleRowLine(r, selected, line)
+			line := m.renderRowLine(r, cursor, active, innerW, selected)
+			line = m.withSessionCount(r, line, innerW)
+			line = m.styleRowLine(r, selected, line)
 			contentLines = append(contentLines, truncateToWidth(line, innerW))
 		}
 	}
@@ -113,35 +81,46 @@ func (m model) View() string {
 		}
 	}
 	if m.err != nil {
-		contentLines = append(contentLines, errorStyle.Render(truncateWidth(statusText, innerW)))
+		contentLines = append(contentLines, t.err.Render(truncateWidth(statusText, innerW)))
 	} else {
-		contentLines = append(contentLines, statusStyle.Render(truncateWidth(statusText, innerW)))
+		contentLines = append(contentLines, t.status.Render(truncateWidth(statusText, innerW)))
 	}
 
-	contentLines = append(contentLines, helpStyle.Render(truncateWidth(compositeBottomLine(m, innerW), innerW)))
+	contentLines = append(contentLines, t.help.Render(truncateWidth(compositeBottomLine(m, innerW), innerW)))
 
 	content := strings.Join(contentLines, "\n")
 
-	rendered := appBorderStyle.Width(lineWidth).Render(content)
+	rendered := t.appBorder.Width(lineWidth).Render(content)
 
-	var overlay strings.Builder
+	var overlayContent string
 	if m.mode == modeInput {
-		overlay.WriteString(renderInputModal(m, lineWidth))
-		overlay.WriteString("\n")
-	}
-	if m.mode == modeConfirm {
-		overlay.WriteString(renderConfirmModal(m, lineWidth))
-		overlay.WriteString("\n")
-	}
-	if m.helpOpen {
-		overlay.WriteString(renderHelpOverlay(lineWidth))
-		overlay.WriteString("\n")
+		overlayContent = m.renderInputModal(lineWidth)
+	} else if m.mode == modeConfirm {
+		overlayContent = m.renderConfirmModal(lineWidth)
+	} else if m.helpOpen {
+		overlayContent = m.renderHelpOverlay(lineWidth)
 	}
 
-	if overlay.Len() > 0 {
-		return rendered + "\n" + overlay.String()
+	if overlayContent != "" {
+		totalH := lipgloss.Height(rendered)
+		overlayH := lipgloss.Height(overlayContent)
+		overlayW := lipgloss.Width(overlayContent)
+		x := (lineWidth - overlayW) / 2
+		y := (totalH - overlayH) / 2
+		if x < 0 {
+			x = 0
+		}
+		if y < 0 {
+			y = 0
+		}
+		bg := lipgloss.NewLayer(rendered)
+		fg := lipgloss.NewLayer(overlayContent).X(x).Y(y).Z(1)
+		rendered = lipgloss.NewCompositor(bg, fg).Render()
 	}
-	return rendered
+
+	v := tea.NewView(rendered)
+	v.AltScreen = true
+	return v
 }
 
 func truncateToWidth(s string, width int) string {
@@ -173,23 +152,24 @@ func truncateToWidth(s string, width int) string {
 	return string(r[:last])
 }
 
-func topBar(m model, width int) string {
+func (m model) topBar(width int) string {
 	search := strings.TrimSpace(m.filter)
+	prompt := "\uf002 " // nerd font: search
 	if m.mode == modeFilter {
-		return searchBoxStyle.Render(truncateWidth("> "+search+"_", width))
+		return m.theme.searchBox.Render(truncateWidth(prompt+search+"_", width))
 	}
 	if search != "" {
-		return searchBoxStyle.Render(truncateWidth("> "+search, width))
+		return m.theme.searchBox.Render(truncateWidth(prompt+search, width))
 	}
-	return searchBoxStyle.Render(">")
+	return m.theme.searchBox.Render(prompt)
 }
 
-func lineWithTag(left, tag string, width int) string {
+func (m model) lineWithTag(left, tag string, width int) string {
 	left = truncateWidth(left, width)
 	if strings.TrimSpace(tag) == "" {
 		return left
 	}
-	tag = selectedHintStyle.Render(tag)
+	tag = m.theme.selectedHint.Render(tag)
 	tagW := lipgloss.Width(tag)
 	if tagW+2 >= width {
 		return truncateWidth(left, width)
@@ -211,17 +191,17 @@ func branchGlyph(r row) string {
 		return "  "
 	}
 	if r.Expanded {
-		return " "
+		return "\uf0d7 " // nerd font: fa-caret-down (expanded)
 	}
-	return " "
+	return "\uf0da " // nerd font: fa-caret-right (collapsed)
 }
 
-func renderRowLine(r row, cursor, active string, width int, selected bool) string {
-	left := fmt.Sprintf("%s %s", cursor, decoratedLabel(r, selected))
-	return lineWithTag(left, active, width)
+func (m model) renderRowLine(r row, cursor, active string, width int, selected bool) string {
+	left := fmt.Sprintf("%s %s", cursor, m.decoratedLabel(r, selected))
+	return m.lineWithTag(left, active, width)
 }
 
-func withSessionCount(r row, line string, width int) string {
+func (m model) withSessionCount(r row, line string, width int) string {
 	count := sessionWindowCount(r)
 	if count == 0 {
 		return line
@@ -232,41 +212,42 @@ func withSessionCount(r row, line string, width int) string {
 	if lineW+suffixW+1 >= width {
 		return line
 	}
-	return line + strings.Repeat(" ", width-lineW-suffixW) + metaStyle.Render(suffix)
+	return line + strings.Repeat(" ", width-lineW-suffixW) + m.theme.meta.Render(suffix)
 }
 
-func styleRowLine(r row, selected bool, line string) string {
+func (m model) styleRowLine(r row, selected bool, line string) string {
+	t := m.theme
 	if selected {
-		return selectedRowStyle.Render(line)
+		return t.selectedRow.Render(line)
 	}
-	if r.Node.Kind == "session" {
-		return sessionRowStyle.Render(line)
+	if r.Node.Kind == contracts.NodeKindSession {
+		return t.sessionRow.Render(line)
 	}
 	if r.Node.Active {
-		return activeRowStyle.Render(line)
+		return t.activeRow.Render(line)
 	}
-	if r.Node.Kind == "window" {
-		return windowRowStyle.Render(line)
+	if r.Node.Kind == contracts.NodeKindWindow {
+		return t.windowRow.Render(line)
 	}
-	return rowStyle.Render(line)
+	return t.row.Render(line)
 }
 
 func sessionIcon() string {
-	return "󰆍"
+	return "\U000f018d" // nerd font: terminal (material)
 }
 
 func windowIcon() string {
-	return ""
+	return "\uf489" // nerd font: oct-terminal
 }
 
 func nodeIcon(r row) string {
-	if r.Node.Kind == "session" {
+	if r.Node.Kind == contracts.NodeKindSession {
 		return sessionIcon()
 	}
 	return windowIcon()
 }
 
-func decoratedLabel(r row, selected bool) string {
+func (m model) decoratedLabel(r row, selected bool) string {
 	label := strings.TrimSpace(r.Node.Label)
 	if label == "" {
 		label = r.Node.ID
@@ -274,8 +255,8 @@ func decoratedLabel(r row, selected bool) string {
 	prefix := r.TreePrefix
 	branch := branchGlyph(r)
 	if !selected {
-		prefix = railStyle.Render(prefix)
-		branch = railStyle.Render(branch)
+		prefix = m.theme.rail.Render(prefix)
+		branch = m.theme.rail.Render(branch)
 	}
 	if r.Depth == 0 {
 		return fmt.Sprintf("%s %s %s", branch, nodeIcon(r), label)
@@ -322,71 +303,92 @@ func compositeBottomLine(m model, lineWidth int) string {
 	return position + strings.Repeat(" ", leftGap) + ws + strings.Repeat(" ", rightGap) + right
 }
 
-func renderHelpOverlay(lineWidth int) string {
-	content := strings.Join([]string{
-		modalTitleStyle.Render("KEYBINDINGS"),
-		"j/k move   u/d page   g/G top/bottom",
-		"h/l fold   H/L collapse-all/expand-all",
-		"/ filter   n/N next/prev match",
-		"a new-window   s new-session   e rename   x delete",
-		"enter switch   r refresh   ctrl+w delete-word   ctrl+u clear",
-		modalHintStyle.Render("? / esc / enter close"),
-	}, "\n")
-	return centerBlock(helpOverlayStyle.Width(minInt(76, lineWidth-8)).Render(content), lineWidth)
+func (m model) renderHelpOverlay(lineWidth int) string {
+	t := m.theme
+	type entry struct{ keys, desc string }
+	type section struct {
+		title   string
+		entries []entry
+	}
+	sections := []section{
+		{"NAVIGATION", []entry{
+			{"j, k, ↓, ↑", "move"},
+			{"ctrl+n, ctrl+p", "move (vim)"},
+			{"u, d, pgup, pgdn", "page up/down"},
+			{"g, G", "top / bottom"},
+			{"h, l, ←, →", "collapse / expand"},
+			{"H, L", "collapse all / expand all"},
+		}},
+		{"ACTIONS", []entry{
+			{"enter, ctrl+y", "select / switch"},
+			{"a", "new window"},
+			{"s", "new session"},
+			{"e", "rename"},
+			{"x", "delete"},
+			{"r", "refresh"},
+		}},
+		{"FILTER", []entry{
+			{"/", "start filter"},
+			{"n, N", "next / prev match"},
+			{"ctrl+l", "clear filter"},
+		}},
+		{"EDIT", []entry{
+			{"ctrl+w", "delete word"},
+			{"ctrl+u", "clear line"},
+		}},
+		{"OTHER", []entry{
+			{"esc", "cancel"},
+			{"q, ctrl+c", "quit"},
+			{"?", "toggle help"},
+		}},
+	}
+
+	// Compute key column width for alignment.
+	keyColW := 0
+	for _, s := range sections {
+		for _, e := range s.entries {
+			if w := lipgloss.Width(e.keys); w > keyColW {
+				keyColW = w
+			}
+		}
+	}
+
+	var lines []string
+	lines = append(lines, t.modalTitle.Render("KEYBINDINGS"))
+	for _, s := range sections {
+		lines = append(lines, "")
+		lines = append(lines, t.meta.Render(s.title))
+		for _, e := range s.entries {
+			pad := keyColW - lipgloss.Width(e.keys)
+			if pad < 0 {
+				pad = 0
+			}
+			lines = append(lines, "  "+t.selectedHint.Render(e.keys)+strings.Repeat(" ", pad)+"  "+e.desc)
+		}
+	}
+	lines = append(lines, "")
+	lines = append(lines, t.modalHint.Render("? / esc / enter close"))
+
+	return t.helpOverlay.Width(min(76, lineWidth-8)).Render(strings.Join(lines, "\n"))
 }
 
-func renderInputModal(m model, lineWidth int) string {
+func (m model) renderInputModal(lineWidth int) string {
+	t := m.theme
 	content := strings.Join([]string{
-		modalTitleStyle.Render(m.input.Title),
+		t.modalTitle.Render(m.input.Title),
 		m.input.Prompt,
 		"> " + m.input.Value + "_",
-		modalHintStyle.Render("enter submit | esc cancel"),
+		t.modalHint.Render("enter submit | esc cancel"),
 	}, "\n")
-	return centerBlock(modalStyle.Width(minInt(72, lineWidth-8)).Render(content), lineWidth)
+	return t.modal.Width(min(72, lineWidth-8)).Render(content)
 }
 
-func renderConfirmModal(m model, lineWidth int) string {
+func (m model) renderConfirmModal(lineWidth int) string {
+	t := m.theme
 	content := strings.Join([]string{
-		modalTitleStyle.Render(m.confirm.Title),
+		t.modalTitle.Render(m.confirm.Title),
 		m.confirm.Body,
-		modalHintStyle.Render("enter/y confirm | esc/n cancel"),
+		t.modalHint.Render("enter/y confirm | esc/n cancel"),
 	}, "\n")
-	return centerBlock(modalStyle.Width(minInt(72, lineWidth-8)).Render(content), lineWidth)
-}
-
-func centerBlock(block string, width int) string {
-	blockW := lipgloss.Width(block)
-	if blockW >= width {
-		return block
-	}
-	padding := (width - blockW) / 2
-	if padding < 0 {
-		padding = 0
-	}
-	lines := strings.Split(block, "\n")
-	for i, line := range lines {
-		lines[i] = strings.Repeat(" ", padding) + line
-	}
-	return strings.Join(lines, "\n")
-}
-
-func appBorderWidth() int {
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		Padding(0, 2).
-		GetHorizontalFrameSize()
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	return t.modal.Width(min(72, lineWidth-8)).Render(content)
 }

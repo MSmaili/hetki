@@ -2,18 +2,17 @@ package core
 
 import (
 	"context"
-	"sort"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/MSmaili/hetki/internal/tui/contracts"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type DispatchFunc func(context.Context, contracts.Intent) (contracts.ActionResult, error)
 
 func Run(initial contracts.Snapshot, dispatch DispatchFunc) error {
-	p := tea.NewProgram(newModel(initial, dispatch), tea.WithAltScreen())
+	p := tea.NewProgram(newModel(initial, dispatch))
 	_, err := p.Run()
 	return err
 }
@@ -79,6 +78,7 @@ type model struct {
 
 	dispatch DispatchFunc
 	keys     KeyMap
+	theme    theme
 }
 
 func newModel(snapshot contracts.Snapshot, dispatch DispatchFunc) model {
@@ -86,6 +86,7 @@ func newModel(snapshot contracts.Snapshot, dispatch DispatchFunc) model {
 		snapshot: snapshot,
 		dispatch: dispatch,
 		keys:     DefaultKeyMap(),
+		theme:    defaultTheme(),
 		mode:     modeBrowse,
 		status:   "ready",
 		expanded: defaultExpanded(snapshot.Nodes, snapshot.ActiveNodeID),
@@ -108,119 +109,6 @@ func clampCursor(cursor, size int) int {
 	return cursor
 }
 
-func flatten(nodes []contracts.Node, expanded map[string]bool, includeAll bool) []row {
-	out := make([]row, 0)
-	flattenAtDepth(nodes, nil, expanded, includeAll, &out)
-	return out
-}
-
-func flattenAtDepth(nodes []contracts.Node, ancestors []bool, expanded map[string]bool, includeAll bool, out *[]row) {
-	for i, n := range nodes {
-		hasNext := i < len(nodes)-1
-		depth := len(ancestors)
-		isExpanded := includeAll || expanded[n.ID]
-		*out = append(*out, row{
-			Node:       n,
-			Depth:      depth,
-			TreePrefix: treePrefix(ancestors, hasNext),
-			Expanded:   isExpanded,
-			Branch:     len(n.Children) > 0,
-		})
-		if len(n.Children) > 0 {
-			nextAncestors := append(append([]bool(nil), ancestors...), hasNext)
-			if isExpanded {
-				flattenAtDepth(n.Children, nextAncestors, expanded, includeAll, out)
-			}
-		}
-	}
-}
-
-func defaultExpanded(nodes []contracts.Node, activeNodeID string) map[string]bool {
-	expanded := make(map[string]bool)
-	markAllExpanded(nodes, expanded)
-	if activeNodeID != "" {
-		markActivePathExpanded(nodes, activeNodeID, expanded)
-	}
-	return expanded
-}
-
-func markActivePathExpanded(nodes []contracts.Node, activeNodeID string, expanded map[string]bool) bool {
-	for _, n := range nodes {
-		if n.ID == activeNodeID {
-			expanded[n.ID] = true
-			return true
-		}
-		if markActivePathExpanded(n.Children, activeNodeID, expanded) {
-			expanded[n.ID] = true
-			return true
-		}
-	}
-	return false
-}
-
-func treePrefix(ancestors []bool, hasNext bool) string {
-	if len(ancestors) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	for _, ancestorHasNext := range ancestors[:len(ancestors)-1] {
-		if ancestorHasNext {
-			b.WriteString("   │  ")
-		} else {
-			b.WriteString("      ")
-		}
-	}
-	b.WriteString("   │  ")
-	return b.String()
-}
-
-func (m *model) applyFilter() {
-	if strings.TrimSpace(m.filter) == "" {
-		m.rows = flatten(m.snapshot.Nodes, m.expanded, false)
-		m.cursor = clampCursor(m.cursor, len(m.rows))
-		return
-	}
-
-	query := strings.ToLower(strings.TrimSpace(m.filter))
-	if query == "" {
-		m.rows = flatten(m.snapshot.Nodes, m.expanded, false)
-		m.cursor = clampCursor(m.cursor, len(m.rows))
-		return
-	}
-
-	allRows := flatten(m.snapshot.Nodes, m.expanded, true)
-	parentByID := make(map[string]string, len(allRows))
-	keep := make(map[string]bool, len(allRows))
-
-	for _, r := range allRows {
-		parentByID[r.Node.ID] = r.Node.ParentID
-		if strings.Contains(strings.ToLower(r.Node.Label), query) {
-			keep[r.Node.ID] = true
-		}
-	}
-
-	for id := range keep {
-		for parent := parentByID[id]; parent != ""; parent = parentByID[parent] {
-			keep[parent] = true
-		}
-	}
-
-	filtered := make([]row, 0, len(allRows))
-	for _, r := range allRows {
-		if keep[r.Node.ID] {
-			filtered = append(filtered, r)
-		}
-	}
-
-	m.rows = filtered
-	if matchIndices := m.matchIndices(); len(matchIndices) > 0 {
-		m.cursor = matchIndices[0]
-	} else {
-		m.cursor = clampCursor(m.cursor, len(m.rows))
-	}
-}
-
 func (m model) reflow() model {
 	m.cursor = clampCursor(m.cursor, len(m.rows))
 	m.listH = m.availableListHeight()
@@ -236,7 +124,7 @@ func (m model) reflow() model {
 func countSeparatorsInRange(rows []row, start, end int) int {
 	count := 0
 	for i := start; i < end && i < len(rows); i++ {
-		if rows[i].Depth == 0 && rows[i].Node.Kind == "session" && i > 0 {
+		if rows[i].Depth == 0 && rows[i].Node.Kind == contracts.NodeKindSession && i > 0 {
 			count++
 		}
 	}
@@ -340,15 +228,6 @@ func (m *model) expandAll() bool {
 	return true
 }
 
-func markAllExpanded(nodes []contracts.Node, expanded map[string]bool) {
-	for _, n := range nodes {
-		if len(n.Children) > 0 {
-			expanded[n.ID] = true
-			markAllExpanded(n.Children, expanded)
-		}
-	}
-}
-
 func (m model) hasCapability(c contracts.Capability) bool {
 	if m.snapshot.Capabilities == nil {
 		return false
@@ -356,32 +235,14 @@ func (m model) hasCapability(c contracts.Capability) bool {
 	return m.snapshot.Capabilities[c]
 }
 
-func contextLines(ctx map[string]string) []string {
-	if len(ctx) == 0 {
-		return nil
+// requireCapability returns (m, true) if the capability is available.
+// Otherwise it sets a consistent "not available" status and returns false.
+func (m model) requireCapability(c contracts.Capability, label string) (model, bool) {
+	if m.hasCapability(c) {
+		return m, true
 	}
-	keys := make([]string, 0, len(ctx))
-	for k := range ctx {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	lines := make([]string, 0, len(keys))
-	for _, k := range keys {
-		lines = append(lines, k+": "+ctx[k])
-	}
-	return lines
-}
-
-func rowLabel(r row) string {
-	label := strings.TrimSpace(r.Node.Label)
-	if label == "" {
-		label = r.Node.ID
-	}
-	if r.Depth == 0 {
-		return label
-	}
-	return r.TreePrefix + label
+	m.status = label + " is not available"
+	return m, false
 }
 
 func workspaceContext(ctx map[string]string) string {
@@ -458,157 +319,4 @@ func clonePayloadMap(payload map[string]string) map[string]string {
 		cloned[k] = v
 	}
 	return cloned
-}
-
-func findRowIndexByID(rows []row, nodeID string) int {
-	if nodeID == "" {
-		return -1
-	}
-	for i := range rows {
-		if rows[i].Node.ID == nodeID {
-			return i
-		}
-	}
-	return -1
-}
-
-func preferredSelectionID(snapshot contracts.Snapshot, intent *contracts.Intent, previousID string) string {
-	if intent == nil {
-		return previousID
-	}
-	switch intent.Type {
-	case contracts.IntentCreateSession, contracts.IntentRenameSession:
-		name := strings.TrimSpace(intent.Payload["name"])
-		if name != "" {
-			return "session:" + name
-		}
-	case contracts.IntentCreateWindow:
-		session := strings.TrimSpace(intent.Payload["session"])
-		if session == "" {
-			session = sessionFromNodeTarget(intent.Target)
-		}
-		name := strings.TrimSpace(intent.Payload["name"])
-		if session != "" && name != "" {
-			if id := findWindowNodeIDByName(snapshot.Nodes, session, name); id != "" {
-				return id
-			}
-		}
-	case contracts.IntentRenameWindow:
-		return nodeIDFromTarget(intent.Target)
-	case contracts.IntentDeleteWindow:
-		return "session:" + sessionFromNodeTarget(intent.Target)
-	}
-	return previousID
-}
-
-func nodeIDFromTarget(target string) string {
-	target = strings.TrimSpace(target)
-	if target == "" {
-		return ""
-	}
-	if session, window, ok := sessionWindowFromNodeTarget(target); ok {
-		return "window:" + session + ":" + window
-	}
-	return "session:" + target
-}
-
-func sessionWindowFromNodeTarget(target string) (string, string, bool) {
-	session, rest, hasWindow := strings.Cut(strings.TrimSpace(target), ":")
-	if !hasWindow || session == "" || rest == "" {
-		return "", "", false
-	}
-	window, _, _ := strings.Cut(rest, ".")
-	window = strings.TrimSpace(window)
-	if window == "" {
-		return "", "", false
-	}
-	return strings.TrimSpace(session), window, true
-}
-
-func findWindowNodeIDByName(nodes []contracts.Node, sessionName, windowName string) string {
-	for _, session := range nodes {
-		if session.Kind != contracts.NodeKindSession || session.Label != sessionName {
-			continue
-		}
-		for _, window := range session.Children {
-			if windowDisplayName(window.Label) == windowName {
-				return window.ID
-			}
-		}
-	}
-	return ""
-}
-
-func windowDisplayName(label string) string {
-	parts := strings.Fields(strings.TrimSpace(label))
-	if len(parts) <= 1 {
-		return strings.TrimSpace(label)
-	}
-	return strings.Join(parts[1:], " ")
-}
-
-func (m model) filterQuery() string {
-	return strings.ToLower(strings.TrimSpace(m.filter))
-}
-
-func (m model) matchIndices() []int {
-	query := m.filterQuery()
-	if query == "" {
-		return nil
-	}
-	indices := make([]int, 0)
-	for i, r := range m.rows {
-		if strings.Contains(strings.ToLower(strings.TrimSpace(r.Node.Label)), query) {
-			indices = append(indices, i)
-		}
-	}
-	return indices
-}
-
-func (m *model) jumpMatch(forward bool) bool {
-	indices := m.matchIndices()
-	if len(indices) == 0 {
-		return false
-	}
-	if len(indices) == 1 {
-		m.cursor = indices[0]
-		*m = m.reflow()
-		return true
-	}
-	currentPos := 0
-	for i, idx := range indices {
-		if idx == m.cursor {
-			currentPos = i
-			break
-		}
-		if idx > m.cursor {
-			currentPos = i
-			if !forward {
-				currentPos = i - 1
-			}
-			break
-		}
-		currentPos = i
-	}
-	if forward {
-		currentPos = (currentPos + 1) % len(indices)
-	} else {
-		currentPos = (currentPos - 1 + len(indices)) % len(indices)
-	}
-	m.cursor = indices[currentPos]
-	*m = m.reflow()
-	return true
-}
-
-func (m model) filterMatchPosition() (int, int) {
-	indices := m.matchIndices()
-	if len(indices) == 0 {
-		return 0, 0
-	}
-	for i, idx := range indices {
-		if idx == m.cursor {
-			return i + 1, len(indices)
-		}
-	}
-	return 1, len(indices)
 }
