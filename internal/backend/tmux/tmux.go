@@ -39,7 +39,10 @@ func (b *TmuxBackend) QueryState() (backend.StateResult, error) {
 	b.paneBaseIndex = result.PaneBaseIndex
 	b.windowBaseIndex = result.WindowBaseIndex
 
-	if err != nil {
+	// tmux exits non-zero when `list-panes -a` runs against an empty (or not-yet-started)
+	// server. The earlier chained `show-options` calls still wrote the indices to stdout,
+	// so a result with no sessions + valid indices parsed is the benign empty-server case.
+	if err != nil && len(result.Sessions) > 0 {
 		return backend.StateResult{}, err
 	}
 

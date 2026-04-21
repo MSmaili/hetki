@@ -25,6 +25,7 @@ type stubBackend struct {
 	attachCalls int
 	dryRunCalls int
 	lastActions []backend.Action
+	allActions  [][]backend.Action
 }
 
 func (s *stubBackend) Name() string { return "stub" }
@@ -38,7 +39,9 @@ func (s *stubBackend) QueryState() (backend.StateResult, error) {
 
 func (s *stubBackend) Apply(actions []backend.Action) error {
 	s.applyCalls++
-	s.lastActions = append([]backend.Action(nil), actions...)
+	copied := append([]backend.Action(nil), actions...)
+	s.lastActions = copied
+	s.allActions = append(s.allActions, copied)
 	return s.applyErr
 }
 
@@ -156,6 +159,45 @@ func canonicalPath(path string) (string, error) {
 		return resolved, nil
 	}
 	return abs, nil
+}
+
+func TestServiceRunColdStartAppliesCreateActions(t *testing.T) {
+	tmpDir := t.TempDir()
+	workspace := "sessions:\n  - name: dev\n    windows:\n      - name: editor\n        path: " + filepath.ToSlash(tmpDir) + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".hetki.yaml"), []byte(workspace), 0644))
+
+	previousWD, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(previousWD))
+	})
+
+	// Cold tmux: QueryState returns an empty StateResult, no error.
+	stub := &stubBackend{queryResult: backend.StateResult{}}
+	service := NewService(func(...string) (backend.Backend, error) { return stub, nil })
+
+	require.NoError(t, service.Run(Options{}))
+
+	// Two Apply calls: first the plan, second the workspace-path metadata stamp.
+	require.Equal(t, 2, stub.applyCalls)
+	assert.Equal(t, 1, stub.attachCalls)
+
+	// First call should carry the create-session plan action.
+	planActions := stub.allActions[0]
+	if assert.Len(t, planActions, 1) {
+		action, ok := planActions[0].(backend.CreateSessionAction)
+		if assert.True(t, ok) {
+			assert.Equal(t, "dev", action.Name)
+			assert.Equal(t, "editor", action.WindowName)
+		}
+	}
+
+	// Second call stamps the workspace path metadata.
+	stampActions := stub.allActions[1]
+	if assert.Len(t, stampActions, 1) {
+		assert.IsType(t, backend.SetSessionOptionAction{}, stampActions[0])
+	}
 }
 
 func TestToBackendActionsMapsPlannerActions(t *testing.T) {

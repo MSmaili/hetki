@@ -61,18 +61,7 @@ func (c *client) ExecuteBatch(actions []Action) error {
 	if len(actions) == 0 {
 		return nil
 	}
-
-	err := c.executeBatch(actions)
-	if err != nil && c.isServerNotRunning(err) {
-		if err := exec.Command(c.bin, actions[0].Args()...).Run(); err != nil {
-			return fmt.Errorf("failed to start tmux: %w", err)
-		}
-		if len(actions) > 1 {
-			return c.executeBatch(actions[1:])
-		}
-		return nil
-	}
-	return err
+	return c.executeBatch(actions)
 }
 
 func (c *client) executeBatch(actions []Action) error {
@@ -84,10 +73,6 @@ func (c *client) executeBatch(actions []Action) error {
 		return fmt.Errorf("tmux batch failed: %v (%s)", err, stderr.String())
 	}
 	return nil
-}
-
-func (c *client) isServerNotRunning(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "no server running")
 }
 
 func buildBatchArgs(actions []Action) []string {

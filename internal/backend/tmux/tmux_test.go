@@ -1,11 +1,44 @@
 package tmux
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/MSmaili/hetki/internal/backend"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestQueryStateToleratesEmptyServer(t *testing.T) {
+	t.Setenv("TMUX", "")
+
+	cases := []error{
+		errors.New("tmux [list-panes -a] failed: exit status 1 (no current target)"),
+		errors.New("tmux [list-panes -a] failed: exit status 1 (no server running on /tmp/tmux-1000/default)"),
+	}
+	for _, runErr := range cases {
+		b := &TmuxBackend{client: &MockClient{
+			RunFunc: func(args ...string) (string, error) {
+				return "0\n0\n", runErr
+			},
+		}}
+		res, err := b.QueryState()
+		assert.NoError(t, err)
+		assert.Empty(t, res.Sessions)
+	}
+}
+
+func TestQueryStatePropagatesRealFailures(t *testing.T) {
+	t.Setenv("TMUX", "")
+
+	// Error with parsed sessions present means something is actually wrong; don't swallow it.
+	b := &TmuxBackend{client: &MockClient{
+		RunFunc: func(args ...string) (string, error) {
+			return "0\n0\n$1|dev|editor|0|layout-a|0|1|0|1|~/code|vim", errors.New("tmux boom")
+		},
+	}}
+	_, err := b.QueryState()
+	assert.Error(t, err)
+}
 
 func TestMapActionsUsesBackendActionTypes(t *testing.T) {
 	b := &TmuxBackend{windowBaseIndex: 1, paneBaseIndex: 1}
