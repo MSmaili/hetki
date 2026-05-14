@@ -12,12 +12,16 @@ type StatusBarProps struct {
 	Status      string
 	Center      string
 	Right       string
+	Compact     bool
 	StatusStyle lipgloss.Style
 	HelpStyle   lipgloss.Style
 	MetaStyle   lipgloss.Style
 }
 
 func RenderStatusBar(props StatusBarProps) string {
+	if props.Width <= 0 {
+		return ""
+	}
 	leftStyled := props.StatusStyle.Render(props.Status)
 	rightStyled := props.HelpStyle.Render(props.Right)
 	centerStyled := props.MetaStyle.Render(props.Center)
@@ -26,7 +30,7 @@ func RenderStatusBar(props StatusBarProps) string {
 	rightW := lipgloss.Width(rightStyled)
 	centerW := lipgloss.Width(centerStyled)
 
-	if leftW+centerW+rightW+4 > props.Width {
+	if props.Compact || leftW+centerW+rightW+4 > props.Width {
 		centerStyled = ""
 		centerW = 0
 	}

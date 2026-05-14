@@ -14,10 +14,14 @@ func (m model) View() tea.View {
 	if lineWidth <= 0 {
 		lineWidth = 100
 	}
-	lineWidth = max(48, lineWidth)
 
-	borderFrameSize := t.appBorder.GetHorizontalFrameSize()
-	innerW := max(24, lineWidth-borderFrameSize)
+	frameStyle := responsiveFrameStyle(t.appBorder, lineWidth)
+	borderFrameSize := frameStyle.GetHorizontalFrameSize()
+	innerW := lineWidth - borderFrameSize
+	if innerW < 1 {
+		innerW = 1
+	}
+	compact := innerW < 56
 
 	start := m.offset
 	end := m.offset + m.listH
@@ -28,10 +32,12 @@ func (m model) View() tea.View {
 	contentLines := []string{
 		t.sectionLine.Render(strings.Repeat("─", innerW)),
 		components.RenderSearchBar(components.SearchBarProps{
-			Width:  innerW,
-			Filter: m.filter,
-			Active: m.mode == modeFilter,
-			Style:  t.searchBox,
+			Width:       innerW,
+			Filter:      m.filter,
+			Active:      m.mode == modeFilter,
+			Compact:     compact,
+			Style:       t.searchBox,
+			PromptStyle: t.selectedHint,
 		}),
 		t.sectionLine.Render(strings.Repeat("─", innerW)),
 	}
@@ -56,6 +62,7 @@ func (m model) View() tea.View {
 		Width:     innerW,
 		EmptyText: emptyStateText(m),
 		Rows:      visibleRows,
+		Compact:   compact,
 		Styles: components.TreeStyles{
 			Meta:        t.meta,
 			Row:         t.row,
@@ -95,6 +102,7 @@ func (m model) View() tea.View {
 		Status:      statusText,
 		Center:      workspaceContext(m.snapshot.ContextBars),
 		Right:       rightText,
+		Compact:     compact,
 		StatusStyle: statusStyle,
 		HelpStyle:   t.help,
 		MetaStyle:   t.meta,
@@ -102,7 +110,7 @@ func (m model) View() tea.View {
 
 	header := strings.Join(contentLines, "\n")
 	middle := strings.Join(rowLines, "\n")
-	borderFrameV := t.appBorder.GetVerticalFrameSize()
+	borderFrameV := frameStyle.GetVerticalFrameSize()
 	middleH := m.height - borderFrameV - lipgloss.Height(header) - lipgloss.Height(bottomBar)
 	if middleH < 1 {
 		middleH = 1
@@ -110,7 +118,7 @@ func (m model) View() tea.View {
 	middle = lipgloss.PlaceVertical(middleH, lipgloss.Top, middle)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, header, middle, bottomBar)
-	rendered := t.appBorder.Width(lineWidth).Render(content)
+	rendered := frameStyle.Width(lineWidth).Render(content)
 
 	var overlayContent string
 	if m.mode == modeInput {
@@ -172,6 +180,19 @@ func (m model) View() tea.View {
 	v := tea.NewView(rendered)
 	v.AltScreen = true
 	return v
+}
+
+func responsiveFrameStyle(base lipgloss.Style, width int) lipgloss.Style {
+	if width < 32 {
+		return lipgloss.NewStyle()
+	}
+	if width < 52 {
+		return lipgloss.NewStyle().Padding(0, 1)
+	}
+	if width < 72 {
+		return base.Copy().Padding(0, 1)
+	}
+	return base
 }
 
 func emptyStateText(m model) string {

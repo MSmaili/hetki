@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -239,7 +240,29 @@ func workspaceContext(ctx map[string]string) string {
 	if workspace == "" {
 		return ""
 	}
-	return "WORKSPACE: " + workspace
+	return "WORKSPACE: " + workspaceLabel(workspace)
+}
+
+func workspaceLabel(workspace string) string {
+	workspace = strings.TrimSpace(workspace)
+	if workspace == "" {
+		return ""
+	}
+	if !strings.ContainsAny(workspace, `/\\`) {
+		return workspace
+	}
+
+	base := filepath.Base(workspace)
+	base = strings.TrimSuffix(base, filepath.Ext(base))
+	if base != "" && !strings.HasPrefix(base, ".hetki") {
+		return base
+	}
+
+	parent := filepath.Base(filepath.Dir(workspace))
+	if parent != "" && parent != "." && parent != string(filepath.Separator) {
+		return parent
+	}
+	return workspace
 }
 
 func sessionWindowCount(r row) int {

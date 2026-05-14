@@ -35,6 +35,7 @@ type TreeProps struct {
 	Width     int
 	EmptyText string
 	Rows      []TreeRowProps
+	Compact   bool
 	Styles    TreeStyles
 }
 
@@ -45,14 +46,14 @@ func RenderTree(props TreeProps) []string {
 
 	lines := make([]string, 0, len(props.Rows))
 	for _, row := range props.Rows {
-		line := renderRowLine(row, props.Styles)
+		line := renderRowLine(row, props.Styles, props.Compact)
 		line = truncateWidth(line, props.Width)
 		lines = append(lines, styleRowLine(row, line, props.Width, props.Styles))
 	}
 	return lines
 }
 
-func renderRowLine(row TreeRowProps, styles TreeStyles) string {
+func renderRowLine(row TreeRowProps, styles TreeStyles, compact bool) string {
 	cursor := " "
 	if row.Selected {
 		cursor = "❯"
@@ -63,8 +64,8 @@ func renderRowLine(row TreeRowProps, styles TreeStyles) string {
 		marker = "● "
 	}
 
-	label := decoratedLabel(row, styles)
-	if row.WindowCount > 0 {
+	label := decoratedLabel(row, styles, compact)
+	if row.WindowCount > 0 && !compact {
 		label += " " + styles.Meta.Render(fmt.Sprintf("(%d)", row.WindowCount))
 	}
 	return fmt.Sprintf("%s %s%s", cursor, marker, label)
@@ -86,10 +87,13 @@ func styleRowLine(row TreeRowProps, line string, width int, styles TreeStyles) s
 	return styles.Row.Render(line)
 }
 
-func decoratedLabel(row TreeRowProps, styles TreeStyles) string {
+func decoratedLabel(row TreeRowProps, styles TreeStyles, compact bool) string {
 	label := strings.TrimSpace(row.Label)
 	if label == "" {
 		label = row.NodeID
+	}
+	if compact {
+		return compactLabel(row, label)
 	}
 	prefix := row.TreePrefix
 	branch := branchGlyph(row)
@@ -101,6 +105,14 @@ func decoratedLabel(row TreeRowProps, styles TreeStyles) string {
 		return fmt.Sprintf("%s %s %s", branch, nodeIcon(row.Kind), label)
 	}
 	return fmt.Sprintf("  %s%s %s", prefix, nodeIcon(row.Kind), label)
+}
+
+func compactLabel(row TreeRowProps, label string) string {
+	indent := strings.Repeat("  ", max(row.Depth-1, 0))
+	if row.Kind == contracts.NodeKindSession {
+		return fmt.Sprintf("%s %s", nodeIcon(row.Kind), label)
+	}
+	return fmt.Sprintf("%s%s %s", indent, nodeIcon(row.Kind), label)
 }
 
 func branchGlyph(row TreeRowProps) string {
