@@ -38,7 +38,9 @@ func (a *LiveAdapter) loadSnapshot(ctx context.Context) (list.Snapshot, error) {
 	if err != nil {
 		return list.Snapshot{}, err
 	}
+	a.mu.Lock()
 	a.index = index
+	a.mu.Unlock()
 	return snapshot, nil
 }
 
@@ -120,7 +122,9 @@ func (a *LiveAdapter) toggleProjection(ctx context.Context, selectedID list.Item
 	}
 	preferred := preferredProjectionItem(selected, next, snapshot, index)
 	a.projection = next
+	a.mu.Lock()
 	a.index = index
+	a.mu.Unlock()
 	return ui.ActionResult{Message: message, Snapshot: &snapshot, SelectItemID: preferred}, nil
 }
 

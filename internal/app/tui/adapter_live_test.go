@@ -25,9 +25,16 @@ type stubBackend struct {
 	switchCalls []string
 	switchErr   error
 	switchHook  func(string)
+	captureHook func(context.Context, string) (string, error)
 }
 
 func (s *stubBackend) Name() string { return "stub" }
+func (s *stubBackend) CapturePane(ctx context.Context, target string) (string, error) {
+	if s.captureHook == nil {
+		panic("unexpected pane capture")
+	}
+	return s.captureHook(ctx, target)
+}
 
 func (s *stubBackend) QueryState(context.Context) (backend.StateResult, error) {
 	s.queryCalls++

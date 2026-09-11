@@ -25,6 +25,7 @@ func keyModeFor(mode uiMode) KeyMode {
 }
 
 func handleQuit(m model, _ list.ItemID) (tea.Model, tea.Cmd) {
+	m.quitting = true
 	return m, tea.Quit
 }
 

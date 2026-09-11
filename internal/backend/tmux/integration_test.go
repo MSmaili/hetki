@@ -31,7 +31,7 @@ func newIsolatedTmuxBackend(t *testing.T) *TmuxBackend {
 	t.Cleanup(func() { _ = exec.Command(realTmux, "-S", socket, "kill-server").Run() })
 
 	wrapperDir := t.TempDir()
-	wrapper := fmt.Sprintf("#!/bin/sh\nexec %q -S %q \"$@\"\n", realTmux, socket)
+	wrapper := fmt.Sprintf("#!/bin/sh\nexec %q -f /dev/null -S %q \"$@\"\n", realTmux, socket)
 	require.NoError(t, os.WriteFile(filepath.Join(wrapperDir, "tmux"), []byte(wrapper), 0755))
 	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("TMUX", "")

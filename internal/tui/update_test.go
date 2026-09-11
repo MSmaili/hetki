@@ -375,17 +375,22 @@ func TestPromptAndConfirmationKeepTheOriginatingItemID(t *testing.T) {
 	require.True(t, requests[len(requests)-1].Confirmed)
 }
 
-func TestStatusIsClearedWhenARequestStopsBeingBusy(t *testing.T) {
-	m := browseModel(newModel(interactionSnapshot(), func(ActionRequest) (ActionResult, error) {
-		return ActionResult{Message: "refreshed"}, nil
-	}))
-	m, cmd := updateModel(t, m, controlKey('r'))
-	require.True(t, m.busy)
-	require.Equal(t, statusRefreshing, m.status)
+func TestActionResultClearsPendingStateOnSuccessAndFailure(t *testing.T) {
+	for _, failure := range []error{nil, errors.New("refresh failed")} {
+		m := browseModel(newModel(interactionSnapshot(), func(ActionRequest) (ActionResult, error) {
+			return ActionResult{Message: "refreshed"}, failure
+		}))
+		m.err = errors.New("previous error")
+		m, cmd := updateModel(t, m, controlKey('r'))
+		require.True(t, m.busy)
+		require.Equal(t, statusRefreshing, m.status)
 
-	m, _ = updateModel(t, m, cmd())
-	require.False(t, m.busy)
-	require.Empty(t, m.status)
+		m, _ = updateModel(t, m, cmd())
+		require.False(t, m.busy)
+		require.Empty(t, m.status)
+		require.Nil(t, m.pending)
+		require.ErrorIs(t, m.err, failure)
+	}
 }
 
 func TestInvalidRefreshRetainsSnapshotAndSelection(t *testing.T) {

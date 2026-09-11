@@ -13,6 +13,11 @@ func (m model) View() tea.View {
 	layout := m.layout()
 	header := m.viewHeader(layout.innerWidth)
 	middle := lipgloss.PlaceVertical(layout.middleHeight, lipgloss.Top, m.viewList(layout))
+	if layout.previewWidth > 0 {
+		left := lipgloss.NewStyle().Width(layout.listWidth).Render(middle)
+		divider := m.theme.sectionLine.Render(strings.TrimSuffix(strings.Repeat(" │ \n", layout.middleHeight), "\n"))
+		middle = lipgloss.JoinHorizontal(lipgloss.Top, left, divider, m.viewPreview(layout.previewWidth, layout.middleHeight))
+	}
 	rendered := layout.frameStyle.Width(layout.lineWidth).Render(lipgloss.JoinVertical(lipgloss.Left, header, middle))
 
 	if overlay := m.viewOverlay(layout.lineWidth, lipgloss.Height(rendered)); overlay != "" {
@@ -48,7 +53,7 @@ func (m model) viewList(layout layoutMetrics) string {
 		})
 	}
 	return strings.Join(renderList(listProps{
-		Width: layout.innerWidth, EmptyText: emptyStateText(m), Rows: visibleRows,
+		Width: layout.listWidth, EmptyText: emptyStateText(m), Rows: visibleRows,
 		Compact: layout.compact, Theme: m.theme,
 	}), "\n")
 }

@@ -8,10 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 type Client interface {
 	Run(context.Context, ...string) (string, error)
+	RunLimited(context.Context, int, ...string) (string, error)
 	Execute(context.Context, Action) error
 }
 
@@ -28,6 +30,18 @@ func New() (Client, error) {
 }
 
 func (c *client) Run(ctx context.Context, args ...string) (string, error) {
+	return c.run(ctx, -1, args...)
+}
+
+// RunLimited bounds stdout and stderr while reading and stops on overflow.
+func (c *client) RunLimited(ctx context.Context, limit int, args ...string) (string, error) {
+	if limit < 0 {
+		return "", fmt.Errorf("invalid stdout limit %d", limit)
+	}
+	return c.run(ctx, limit, args...)
+}
+
+func (c *client) run(ctx context.Context, limit int, args ...string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -35,8 +49,23 @@ func (c *client) Run(ctx context.Context, args ...string) (string, error) {
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
+	var stdoutLimit, stderrLimit *limitedWriter
+	if limit >= 0 {
+		stop := func() { _ = cmd.Process.Kill() }
+		stdoutLimit = &limitedWriter{buffer: &out, limit: limit, stop: stop}
+		stderrLimit = &limitedWriter{buffer: &stderr, limit: 4096, stop: stop}
+		cmd.Stdout, cmd.Stderr = stdoutLimit, stderrLimit
+		// A descendant retaining the pipes must not defeat cancellation.
+		cmd.WaitDelay = 100 * time.Millisecond
+	}
 
 	err := cmd.Run()
+	if stdoutLimit != nil && stdoutLimit.exceeded {
+		err = errors.Join(err, fmt.Errorf("stdout exceeds %d bytes", limit))
+	}
+	if stderrLimit != nil && stderrLimit.exceeded {
+		err = errors.Join(err, fmt.Errorf("stderr exceeds %d bytes", stderrLimit.limit))
+	}
 	// Raw output: #{q:...} parsers need exact record boundaries.
 	output := out.String()
 
@@ -45,6 +74,24 @@ func (c *client) Run(ctx context.Context, args ...string) (string, error) {
 	}
 
 	return output, nil
+}
+
+type limitedWriter struct {
+	buffer   *bytes.Buffer
+	limit    int
+	stop     func()
+	exceeded bool
+}
+
+func (w *limitedWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	if remaining := w.limit - w.buffer.Len(); n > remaining {
+		p = p[:remaining]
+		w.exceeded = true
+		w.stop()
+	}
+	_, _ = w.buffer.Write(p)
+	return n, nil
 }
 
 func (c *client) Execute(ctx context.Context, action Action) error {

@@ -81,6 +81,7 @@ func resolveBindingKeys(mode KeyMode, binding Binding, used map[string]ActionID)
 func DefaultKeyMap() KeyMap {
 	keymap, err := ResolveKeyMap(map[KeyMode][]Binding{
 		KeyModeNormal: {
+			{Action: ActionTogglePreview, Keys: []string{"alt+p"}},
 			{Action: ActionQuit, Keys: []string{"q"}},
 			{Action: ActionMoveUp, Keys: []string{"up", "k", "ctrl+p"}},
 			{Action: ActionMoveDown, Keys: []string{"down", "j", "ctrl+n"}},
@@ -110,6 +111,7 @@ func DefaultKeyMap() KeyMap {
 			{Action: ActionLastSession, Keys: []string{"ctrl+o"}},
 		},
 		KeyModeJump: {
+			{Action: ActionTogglePreview, Keys: []string{"alt+p"}},
 			{Action: ActionLastSession, Keys: []string{"ctrl+o"}},
 			{Action: ActionCancel, Keys: []string{"esc"}},
 			{Action: ActionMoveUp, Keys: []string{"ctrl+p"}},
@@ -118,6 +120,7 @@ func DefaultKeyMap() KeyMap {
 			{Action: ActionToggleProjection, Keys: []string{"tab"}},
 		},
 		KeyModeFilter: {
+			{Action: ActionTogglePreview, Keys: []string{"alt+p"}},
 			{Action: ActionLastSession, Keys: []string{"ctrl+o"}},
 			{Action: ActionCancel, Keys: []string{"esc"}},
 			{Action: ActionConfirm, Keys: []string{"enter", "ctrl+y"}},

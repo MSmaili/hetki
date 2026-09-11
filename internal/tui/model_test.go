@@ -27,7 +27,7 @@ func TestRunRejectsInvalidInitialProjectionBeforeStartingTea(t *testing.T) {
 		{ID: "same", Primary: "one"},
 		{ID: "same", Primary: "two"},
 	}}
-	_, err := Run(context.Background(), invalid, nil)
+	_, err := Run(context.Background(), invalid, DefaultKeyMap(), DefaultStartMode(), nil, PreviewOptions{Width: DefaultPreviewWidth})
 	if err == nil || !strings.Contains(err.Error(), "duplicate item ID") {
 		t.Fatalf("Run error = %v, want duplicate item ID", err)
 	}

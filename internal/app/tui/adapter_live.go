@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/MSmaili/hetki/internal/backend"
 	"github.com/MSmaili/hetki/internal/frecency"
@@ -12,6 +13,7 @@ import (
 
 type LiveAdapter struct {
 	DetectBackend func(...string) (backend.Backend, error)
+	mu            sync.RWMutex // Protects the index and backend instance; never held during capture.
 	cached        backend.Backend
 	index         itemIndex
 	projection    projectionKind
@@ -104,7 +106,9 @@ func (a *LiveAdapter) resolveItem(id list.ItemID) (liveItem, error) {
 	if id == "" {
 		return liveItem{}, fmt.Errorf("action requires a selected item")
 	}
+	a.mu.RLock()
 	item, exists := a.index[id]
+	a.mu.RUnlock()
 	if !exists {
 		return liveItem{}, fmt.Errorf("selected item %q is stale", id)
 	}
@@ -112,6 +116,8 @@ func (a *LiveAdapter) resolveItem(id list.ItemID) (liveItem, error) {
 }
 
 func (a *LiveAdapter) detectBackend() (backend.Backend, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.cached != nil {
 		return a.cached, nil
 	}

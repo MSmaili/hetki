@@ -15,16 +15,18 @@ import (
 type Driver interface {
 	Load(context.Context) (list.Snapshot, error)
 	Execute(context.Context, ui.ActionRequest) (ui.ActionResult, error)
+	Preview(context.Context, list.ItemID) (string, error)
 	Navigate(context.Context, ui.BackendTarget) error
 }
 
-type RunUIFunc func(context.Context, list.Snapshot, ui.KeyMap, ui.StartMode, ui.DispatchFunc) (ui.BackendTarget, error)
+type RunUIFunc func(context.Context, list.Snapshot, ui.KeyMap, ui.StartMode, ui.DispatchFunc, ui.PreviewOptions) (ui.BackendTarget, error)
 
 type Service struct {
-	Driver    Driver
-	Keys      ui.KeyMap
-	StartMode ui.StartMode
-	RunUI     RunUIFunc
+	Driver       Driver
+	Keys         ui.KeyMap
+	StartMode    ui.StartMode
+	PreviewWidth int
+	RunUI        RunUIFunc
 }
 
 func NewService(detectBackend func(...string) (backend.Backend, error)) Service {
@@ -32,7 +34,7 @@ func NewService(detectBackend func(...string) (backend.Backend, error)) Service 
 		Driver:    NewLiveAdapter(detectBackend),
 		Keys:      ui.DefaultKeyMap(),
 		StartMode: ui.DefaultStartMode(),
-		RunUI:     ui.RunWithStartMode,
+		RunUI:     ui.Run,
 	}
 }
 
@@ -42,7 +44,7 @@ func (s Service) Run(ctx context.Context) error {
 	}
 	runUI := s.RunUI
 	if runUI == nil {
-		runUI = ui.RunWithStartMode
+		runUI = ui.Run
 	}
 	keys := s.Keys
 	if keys.IsZero() {
@@ -53,35 +55,57 @@ func (s Service) Run(ctx context.Context) error {
 		startMode = ui.DefaultStartMode()
 	}
 
+	width := s.PreviewWidth
+	if width == 0 {
+		width = ui.DefaultPreviewWidth
+	}
+	if width < 1 || width > 99 {
+		return fmt.Errorf("preview width must be between 1 and 99 percent")
+	}
+
 	effectsCtx, cancelEffects := context.WithCancel(ctx)
 	defer cancelEffects()
 	var effects sync.WaitGroup
 	var effectsMu sync.Mutex
-	effectsClosed := false
 
 	initial, err := s.Driver.Load(effectsCtx)
 	if err != nil {
 		return err
 	}
 
-	dispatch := func(request ui.ActionRequest) (ui.ActionResult, error) {
+	beginEffect := func() error {
 		effectsMu.Lock()
-		if effectsClosed {
-			effectsMu.Unlock()
-			return ui.ActionResult{}, context.Canceled
+		defer effectsMu.Unlock()
+		if err := effectsCtx.Err(); err != nil {
+			return err
 		}
 		effects.Add(1)
-		effectsMu.Unlock()
-		defer effects.Done()
-		if err := effectsCtx.Err(); err != nil {
+		return nil
+	}
+	dispatch := func(request ui.ActionRequest) (ui.ActionResult, error) {
+		if err := beginEffect(); err != nil {
 			return ui.ActionResult{}, err
 		}
+		defer effects.Done()
 		return s.Driver.Execute(effectsCtx, request)
 	}
+	preview := func(ctx context.Context, id list.ItemID) (string, error) {
+		if err := beginEffect(); err != nil {
+			return "", err
+		}
+		defer effects.Done()
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		readCtx, cancel := context.WithCancel(effectsCtx)
+		defer cancel()
+		stop := context.AfterFunc(ctx, cancel)
+		defer stop()
+		return s.Driver.Preview(readCtx, id)
+	}
 
-	navigation, err := runUI(effectsCtx, initial, keys, startMode, dispatch)
+	navigation, err := runUI(effectsCtx, initial, keys, startMode, dispatch, ui.PreviewOptions{Width: width, Read: preview})
 	effectsMu.Lock()
-	effectsClosed = true
 	cancelEffects()
 	effectsMu.Unlock()
 	effects.Wait()

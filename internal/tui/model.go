@@ -9,19 +9,13 @@ import (
 	"github.com/MSmaili/hetki/internal/tui/list"
 )
 
-func Run(ctx context.Context, initial list.Snapshot, dispatch DispatchFunc) (BackendTarget, error) {
-	return RunWithKeyMap(ctx, initial, DefaultKeyMap(), dispatch)
-}
-
-func RunWithKeyMap(ctx context.Context, initial list.Snapshot, keys KeyMap, dispatch DispatchFunc) (BackendTarget, error) {
-	return RunWithStartMode(ctx, initial, keys, DefaultStartMode(), dispatch)
-}
-
-func RunWithStartMode(ctx context.Context, initial list.Snapshot, keys KeyMap, startMode StartMode, dispatch DispatchFunc) (BackendTarget, error) {
+// Run expects resolved options; its caller cancels and joins effects.
+func Run(ctx context.Context, initial list.Snapshot, keys KeyMap, startMode StartMode, dispatch DispatchFunc, preview PreviewOptions) (BackendTarget, error) {
 	m, err := newModelWithStartMode(initial, dispatch, keys, startMode)
 	if err != nil {
 		return "", err
 	}
+	m.ctx, m.readPreview, m.preview.width = ctx, preview.Read, preview.Width
 	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithFPS(120))
 	final, err := p.Run()
 	if err != nil {
@@ -69,6 +63,10 @@ type model struct {
 	pending     *ActionRequest
 	pendingRows []list.ItemID
 	navigation  BackendTarget
+	quitting    bool
+	preview     previewState
+	readPreview PreviewFunc
+	ctx         context.Context
 
 	width  int
 	height int
@@ -101,6 +99,8 @@ func newModelWithStartMode(snapshot list.Snapshot, dispatch DispatchFunc, keys K
 		keys:     keys,
 		theme:    defaultTheme(),
 		mode:     modeBrowse,
+		ctx:      context.Background(),
+		preview:  previewState{width: DefaultPreviewWidth},
 	}
 	m = m.reflow()
 	switch startMode {
@@ -125,6 +125,8 @@ func (m model) reflow() model {
 type layoutMetrics struct {
 	lineWidth    int
 	innerWidth   int
+	listWidth    int
+	previewWidth int
 	middleHeight int
 	compact      bool
 	frameStyle   lipgloss.Style
@@ -141,11 +143,20 @@ func (m model) layout() layoutMetrics {
 	}
 	frameStyle := responsiveFrameStyle(m.theme.appBorder, lineWidth, height)
 	innerWidth := max(1, lineWidth-frameStyle.GetHorizontalFrameSize())
+	listWidth, previewWidth := innerWidth, 0
+	const separatorWidth, minColumnWidth = 3, 20
+	if m.preview.visible && innerWidth >= 2*minColumnWidth+separatorWidth {
+		available := innerWidth - separatorWidth
+		previewWidth = min(max(available*m.preview.width/100, minColumnWidth), available-minColumnWidth)
+		listWidth = available - previewWidth
+	}
 	return layoutMetrics{
 		lineWidth:    lineWidth,
 		innerWidth:   innerWidth,
+		listWidth:    listWidth,
+		previewWidth: previewWidth,
 		middleHeight: max(1, height-frameStyle.GetVerticalFrameSize()-2),
-		compact:      innerWidth < 56,
+		compact:      listWidth < 56,
 		frameStyle:   frameStyle,
 	}
 }

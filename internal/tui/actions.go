@@ -40,6 +40,7 @@ const (
 	ActionConfirm          ActionID = "confirm"
 	ActionRefresh          ActionID = "refresh"
 	ActionToggleProjection ActionID = "toggle_projection"
+	ActionTogglePreview    ActionID = "toggle_preview"
 	ActionOpen             ActionID = "open"
 	ActionLastSession      ActionID = "last_session"
 )
@@ -76,6 +77,7 @@ var declaredActions = [...]ActionID{
 	ActionConfirm,
 	ActionRefresh,
 	ActionToggleProjection,
+	ActionTogglePreview,
 	ActionOpen,
 	ActionLastSession,
 }
@@ -116,6 +118,7 @@ func init() {
 		ActionConfirm:          handleConfirm,
 		ActionRefresh:          handleRefresh,
 		ActionToggleProjection: handleToggleProjection,
+		ActionTogglePreview:    handleTogglePreview,
 		ActionOpen:             handleOpen,
 		ActionLastSession:      handleLastSession,
 	}

@@ -37,6 +37,9 @@ type stubBackend struct {
 }
 
 func (s *stubBackend) Name() string { return "stub" }
+func (s *stubBackend) CapturePane(context.Context, string) (string, error) {
+	panic("unexpected pane capture")
+}
 
 func (s *stubBackend) QueryState(context.Context) (backend.StateResult, error) {
 	if s.queryErr != nil {

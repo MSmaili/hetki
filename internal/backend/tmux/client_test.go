@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,13 +33,21 @@ type shellAction []string
 func (a shellAction) Args() []string { return a }
 
 type MockClient struct {
-	RunFunc     func(context.Context, ...string) (string, error)
-	ExecuteFunc func(context.Context, Action) error
+	RunFunc        func(context.Context, ...string) (string, error)
+	RunLimitedFunc func(context.Context, int, ...string) (string, error)
+	ExecuteFunc    func(context.Context, Action) error
 }
 
 func (m *MockClient) Run(ctx context.Context, args ...string) (string, error) {
 	if m.RunFunc != nil {
 		return m.RunFunc(ctx, args...)
+	}
+	return "", nil
+}
+
+func (m *MockClient) RunLimited(ctx context.Context, limit int, args ...string) (string, error) {
+	if m.RunLimitedFunc != nil {
+		return m.RunLimitedFunc(ctx, limit, args...)
 	}
 	return "", nil
 }
@@ -126,6 +135,54 @@ func TestClientRunCancelsStartedProcess(t *testing.T) {
 	require.ErrorIs(t, runErr, context.Canceled)
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, runErr, &exitErr)
+}
+
+func TestClientRunLimitedBoundsOutputAtReadTime(t *testing.T) {
+	sh, err := exec.LookPath("sh")
+	require.NoError(t, err)
+	c := &client{bin: sh}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	output, err := c.RunLimited(ctx, 8, "-c", `printf '  raw \n\n'`)
+	require.NoError(t, err)
+	assert.Equal(t, "  raw \n\n", output, "do not trim capture whitespace")
+
+	// An endless producer catches implementations that truncate only after exit.
+	output, err = c.RunLimited(ctx, 8, "-c", `while :; do printf 123456789; done`)
+	require.ErrorContains(t, err, "stdout exceeds 8 bytes")
+	assert.NotErrorIs(t, err, context.Canceled, "overflow is not caller cancellation")
+	assert.LessOrEqual(t, len(output), 8)
+	assert.NoError(t, ctx.Err(), "overflow must cancel only the owned process")
+
+	_, err = c.RunLimited(ctx, 8, "-c", `while :; do printf 123456789 >&2; done`)
+	require.ErrorContains(t, err, "stderr exceeds 4096 bytes")
+	assert.Less(t, len(err.Error()), 4600, "stderr diagnostics must stay bounded")
+	assert.NoError(t, ctx.Err())
+
+	output, err = c.Run(ctx, "-c", `i=0; while [ "$i" -lt 5000 ]; do printf x; i=$((i+1)); done`)
+	require.NoError(t, err)
+	assert.Equal(t, strings.Repeat("x", 5000), output, "Run remains unbounded")
+}
+
+func TestClientRunLimitedValidatesLimitAndPreservesExitErrors(t *testing.T) {
+	_, err := (&client{bin: "must-not-start"}).RunLimited(context.Background(), -1)
+	require.ErrorContains(t, err, "invalid stdout limit")
+	sh, err := exec.LookPath("sh")
+	require.NoError(t, err)
+	c := &client{bin: sh}
+	output, err := c.RunLimited(context.Background(), 0, "-c", "true")
+	require.NoError(t, err)
+	assert.Empty(t, output)
+	_, err = c.RunLimited(context.Background(), 0, "-c", "printf x")
+	require.ErrorContains(t, err, "stdout exceeds 0 bytes")
+
+	output, err = c.RunLimited(context.Background(), 8, "-c", "printf partial; echo denied >&2; exit 7")
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 7, exitErr.ExitCode())
+	assert.ErrorContains(t, err, "denied")
+	assert.Equal(t, "partial", output)
 }
 
 func TestClientNoninteractiveActionsDoNotWriteToTerminal(t *testing.T) {

@@ -39,12 +39,19 @@ func (ptyDriver) Execute(_ context.Context, request ui.ActionRequest) (ui.Action
 	return ui.ActionResult{Navigation: "dev"}, nil
 }
 
+func (ptyDriver) Preview(context.Context, list.ItemID) (string, error) {
+	return "PREVIEW CONTENT", nil
+}
+
 func (d ptyDriver) Navigate(ctx context.Context, target ui.BackendTarget) error {
 	return d.navigate(ctx, target)
 }
 
 func TestTerminalRestoredBeforeNavigation(t *testing.T) {
 	if os.Getenv(ptyHelperEnv) == "1" {
+		size := exec.Command("stty", "cols", "100", "rows", "24")
+		size.Stdin = os.Stdin
+		require.NoError(t, size.Run())
 		b, err := backendtmux.NewBackend()
 		require.NoError(t, err)
 		driver := ptyDriver{navigate: func(ctx context.Context, target ui.BackendTarget) error {
@@ -54,7 +61,7 @@ func TestTerminalRestoredBeforeNavigation(t *testing.T) {
 			fmt.Println("RECORDED")
 			return nil
 		}}
-		require.NoError(t, (Service{Driver: driver, RunUI: ui.RunWithStartMode}).Run(context.Background()))
+		require.NoError(t, (Service{Driver: driver, RunUI: ui.Run}).Run(context.Background()))
 		return
 	}
 
@@ -84,6 +91,8 @@ func TestTerminalRestoredBeforeNavigation(t *testing.T) {
 	cmd.Stdin = input
 	go func() {
 		time.Sleep(500 * time.Millisecond)
+		_, _ = inputWriter.Write([]byte("\x1bp")) // Alt+P
+		time.Sleep(500 * time.Millisecond)
 		_, _ = inputWriter.Write([]byte("\r"))
 		_ = inputWriter.Close()
 	}()
@@ -92,6 +101,7 @@ func TestTerminalRestoredBeforeNavigation(t *testing.T) {
 	cmd.Stderr = &output
 	require.NoError(t, cmd.Run(), output.String())
 
+	require.Contains(t, output.String(), "PREVIEW CONTENT")
 	bytesOut := output.Bytes()
 	restored := bytes.Index(bytesOut, []byte("\x1b[?1049l"))
 	navigation := bytes.Index(bytesOut, []byte("NAVIGATION"))

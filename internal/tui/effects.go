@@ -15,39 +15,36 @@ type actionResultMsg struct {
 }
 
 func (m model) handleActionResult(msg actionResultMsg) (tea.Model, tea.Cmd) {
-	previousRows := m.pendingRows
-	m.pendingRows = nil
-	if msg.result.Snapshot != nil && m.mode == modeJump {
+	result := msg.result
+	pending, previousRows := m.pending, m.pendingRows
+	m.pending, m.pendingRows = nil, nil
+	m.busy, m.status = false, ""
+	if result.Snapshot != nil && m.mode == modeJump {
 		m.cancelJump()
 	}
-	m.busy = false
-	m.status = ""
-	pending := m.pending
-	m.pending = nil
-	if msg.err != nil {
-		m.err = msg.err
+	m.err = msg.err
+	switch {
+	case m.err != nil:
+		return m, nil
+	case result.Menu != nil || result.Input != nil || result.Confirmation != nil:
+		m.openOverlay(result, pending)
+		return m.reflow(), nil
+	case result.Navigation != "":
+		m.navigation = result.Navigation
+		return m, tea.Quit
+	case result.Snapshot == nil:
 		return m, nil
 	}
-	m.err = nil
-	switch {
-	case msg.result.Menu != nil || msg.result.Input != nil || msg.result.Confirmation != nil:
-		m.openOverlay(msg.result, pending)
-		return m.reflow(), nil
-	case msg.result.Navigation != "":
-		m.navigation = msg.result.Navigation
-		return m, tea.Quit
+
+	if err := m.items.Replace(*result.Snapshot, result.SelectItemID); err != nil {
+		m.err = err
+		return m, nil
 	}
-	if msg.result.Snapshot != nil {
-		if err := m.items.Replace(*msg.result.Snapshot, msg.result.SelectItemID); err != nil {
-			m.err = err
-			return m, nil
-		}
-		if pending != nil && isDeleteAction(pending.ActionID) {
-			m.selectAfterDelete(pending.ItemID, msg.result.SelectItemID, previousRows)
-		}
-		m = m.reflow()
+	m.preview.invalidate()
+	if pending != nil && isDeleteAction(pending.ActionID) {
+		m.selectAfterDelete(pending.ItemID, result.SelectItemID, previousRows)
 	}
-	return m, nil
+	return m.reflow(), nil
 }
 
 func isDeleteAction(action ActionID) bool {

@@ -5,7 +5,15 @@ import tea "charm.land/bubbletea/v2"
 func (m model) Init() tea.Cmd { return nil }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	updated, cmd := m.update(msg)
+	next, previewCmd := updated.(model).syncPreview()
+	return next, tea.Batch(cmd, previewCmd)
+}
+
+func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case previewResultMsg:
+		return m.handlePreviewResult(msg)
 	case tea.WindowSizeMsg:
 		return m.updateWindowSize(msg)
 	case actionResultMsg:
@@ -46,7 +54,7 @@ func (m model) updatePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 
 func (m model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "ctrl+c" {
-		return m, tea.Quit
+		return handleQuit(m, "")
 	}
 	if m.busy {
 		return m, nil
