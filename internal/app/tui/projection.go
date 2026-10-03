@@ -103,7 +103,7 @@ func (a *LiveAdapter) toggleProjection(ctx context.Context, selectedID list.Item
 		}
 	}
 	next := projectionFlat
-	message := "showing flat destinations"
+	message := "showing panes"
 	if a.projection == projectionFlat {
 		next = projectionTree
 		message = "showing session tree"

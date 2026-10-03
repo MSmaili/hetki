@@ -83,3 +83,24 @@ func TestSwitchTargetsStableIDsOnColonNamedSessions(t *testing.T) {
 		fmt.Sprintf("switch-client -t %s:%d.%d", sessionID, windowIndex, paneIndex),
 	}, strings.Split(strings.TrimSpace(string(logged)), "\n"))
 }
+
+func TestSwitchScopedPaneKeepsTheSelectedLinkedSession(t *testing.T) {
+	b, navLog := newNavigableTmuxBackend(t)
+	ctx := context.Background()
+	_, err := b.client.Run(ctx, "new-session", "-d", "-s", "first", "-P", "-F", "#{session_id}")
+	require.NoError(t, err)
+	state, err := RunQuery(ctx, b.client, LoadStateQuery{})
+	require.NoError(t, err)
+	window := state.Sessions[0].Windows[0]
+	otherID, err := b.client.Run(ctx, "new-session", "-d", "-s", "second", "-P", "-F", "#{session_id}")
+	require.NoError(t, err)
+	otherID = strings.TrimSpace(otherID)
+	_, err = b.client.Run(ctx, "link-window", "-s", window.ID, "-t", otherID+":9")
+	require.NoError(t, err)
+	paneID := window.Panes[0].ID
+	require.ErrorContains(t, b.Switch(ctx, paneID), "ambiguous", "bare pane ID must not pick an arbitrary link")
+	require.NoError(t, b.Switch(ctx, otherID+":"+window.ID+"."+paneID))
+	logged, err := os.ReadFile(navLog)
+	require.NoError(t, err)
+	require.Equal(t, fmt.Sprintf("attach-session -t %s:9.%d\n", otherID, window.Panes[0].Index), string(logged))
+}

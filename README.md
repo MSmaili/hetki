@@ -8,7 +8,7 @@ A keyboard-first tmux workspace manager for Linux and macOS.
 
 ## What it does
 
-- Browse and switch between tmux sessions and windows in an interactive TUI.
+- Browse and switch between tmux sessions, windows, and individual panes in an interactive TUI.
 - Save the current session, or all sessions, as a strict YAML workspace.
 - Start and reconcile saved workspaces.
 
@@ -50,6 +50,18 @@ hetki switch dev      # Switch directly to a session
 ```
 
 Run `hetki --help` or `hetki <command> --help` for the current CLI options.
+
+The default flat list shows one row per pane, with its directory in the middle
+and foreground command aligned at the far right. Pane IDs appear only to
+distinguish otherwise identical rows. `Tab` toggles the session/window tree.
+Same-directory panes stay distinct; Enter opens the selected pane, while
+rename/delete still act on its window. Names are snapshot observations,
+updated on refresh—not live status.
+On macOS, single-process Node jobs can expose a short name through
+argv-zero/process title; uncertain or oversized process data keeps the raw
+command. Linux uses tmux's own argv-zero-based command observation without
+additional process scanning. There is no application catalogue or package-path
+matching; ordinary Node jobs and failed lookups keep the raw command.
 
 ## Safety
 

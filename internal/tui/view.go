@@ -47,6 +47,7 @@ func (m model) viewList(layout layoutMetrics) string {
 	for i, row := range rows {
 		visibleRows = append(visibleRows, rowProps{
 			ItemID: string(row.Item.ID), Primary: row.Item.Primary, Secondary: row.Item.Secondary,
+			Trailing:  row.Item.Trailing,
 			JumpLabel: m.jumpLabel(row.Item.ID),
 			Depth:     row.Depth, TreePrefix: row.TreePrefix, Expanded: row.Expanded, Branch: row.Branch,
 			Active: m.items.IsActive(row.Item.ID), Selected: m.items.Offset()+i == m.items.Cursor(),

@@ -59,7 +59,8 @@ type ActiveContext struct {
 }
 
 type LoadStateQuery struct {
-	IncludeClients bool
+	IncludeClients     bool
+	IncludeProgramInfo bool
 }
 
 func (q LoadStateQuery) Args() []string {
@@ -69,6 +70,9 @@ func (q LoadStateQuery) Args() []string {
 		";", "show-options", "-gv", "pane-base-index",
 		";", "list-panes", "-a",
 		"-F", "#{session_id}|#{q:session_name}|#{window_id}|#{q:window_name}|#{window_index}|#{window_layout}|#{window_zoomed_flag}|#{window_active}|#{pane_id}|#{pane_index}|#{pane_active}|#{q:pane_current_path}|#{q:pane_current_command}|#{q:" + backend.WorkspacePathOption + "}",
+	}
+	if q.IncludeProgramInfo {
+		args[len(args)-1] += "|#{pane_pid}|#{pane_dead}"
 	}
 	if q.IncludeClients {
 		args = append(args, ";", "list-clients", "-F", "client|#{session_id}|#{pane_id}|#{q:client_last_session}")
@@ -112,7 +116,7 @@ func (q LoadStateQuery) Parse(output string) (LoadStateResult, error) {
 			result.clients = append(result.clients, client)
 			continue
 		}
-		p, err := parsePaneLine(line)
+		p, err := parsePaneLineWithProgramInfo(line, q.IncludeProgramInfo)
 		if err != nil {
 			return LoadStateResult{}, fmt.Errorf("invalid tmux pane row %d: %w", i+1, err)
 		}
@@ -137,12 +141,22 @@ type paneLine struct {
 	paneActive                                   bool
 	panePath, paneCmd                            string
 	workspacePath                                string
+	panePID                                      int
+	paneDead                                     bool
 }
 
 const paneFieldCount = 14
 
 func parsePaneLine(line string) (paneLine, error) {
-	fields, err := parseFields(line, paneFieldCount)
+	return parsePaneLineWithProgramInfo(line, false)
+}
+
+func parsePaneLineWithProgramInfo(line string, programInfo bool) (paneLine, error) {
+	count := paneFieldCount
+	if programInfo {
+		count += 2
+	}
+	fields, err := parseFields(line, count)
 	if err != nil {
 		return paneLine{}, err
 	}
@@ -181,6 +195,14 @@ func parsePaneLine(line string) (paneLine, error) {
 	}
 	if err := validateObjectID("pane", p.paneID, '%'); err != nil {
 		return paneLine{}, err
+	}
+	if programInfo {
+		if p.panePID, err = parseIndex("pane PID", fields[14]); err != nil || p.panePID == 0 {
+			return paneLine{}, fmt.Errorf("invalid pane PID %q", fields[14])
+		}
+		if p.paneDead, err = parseFlag("pane dead", fields[15]); err != nil {
+			return paneLine{}, err
+		}
 	}
 	return p, nil
 }
@@ -273,7 +295,7 @@ func (b *stateBuilder) addPane(p paneLine, currentID string) {
 	}
 	win := b.getOrCreateWindow(sess, p.windowID, p.windowName, p.windowIndex, p.windowLayout, p.panePath)
 	win.Active = p.windowActive
-	win.Panes = append(win.Panes, Pane{ID: p.paneID, Index: p.paneIndex, Path: p.panePath, Command: p.paneCmd, Zoom: p.windowZoomed && p.paneActive, Active: p.paneActive})
+	win.Panes = append(win.Panes, Pane{ID: p.paneID, Index: p.paneIndex, Path: p.panePath, Command: p.paneCmd, PID: p.panePID, Dead: p.paneDead, Zoom: p.windowZoomed && p.paneActive, Active: p.paneActive})
 }
 
 func (b *stateBuilder) getOrCreateSession(id, name string) *Session {

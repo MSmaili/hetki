@@ -15,6 +15,8 @@ type Pane struct {
 	Index   int
 	Path    string
 	Command string
+	PID     int
+	Dead    bool
 	Zoom    bool
 	Active  bool
 }

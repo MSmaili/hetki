@@ -59,7 +59,7 @@ func liveItemExists(state backend.StateResult, item liveItem) bool {
 		return false
 	}
 	for _, pane := range window.Panes {
-		if pane.ID == item.Target && pane.Path == item.RawPath {
+		if pane.ID == item.PaneID {
 			return true
 		}
 	}
@@ -85,8 +85,12 @@ func navigationRecordForItem(state backend.StateResult, item liveItem) (navigati
 		return navigationRecord{}, false
 	}
 	if item.Kind == liveDestination {
-		record := navigationRecord{target: item.Target, path: item.RawPath, session: session.Name}
-		return record, item.RawPath != ""
+		for _, pane := range window.Panes {
+			if pane.ID == item.PaneID && pane.Path != "" {
+				return navigationRecord{target: item.Target, path: pane.Path, session: session.Name}, true
+			}
+		}
+		return navigationRecord{}, false
 	}
 	pane, found := activePane(window.Panes)
 	if !found || pane.Path == "" {

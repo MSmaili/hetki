@@ -1,20 +1,17 @@
 package tui
 
 import (
-	"encoding/base64"
 	"fmt"
 	"sort"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/MSmaili/hetki/internal/backend"
 	"github.com/MSmaili/hetki/internal/frecency"
+	"github.com/MSmaili/hetki/internal/terminal"
 	"github.com/MSmaili/hetki/internal/tui/list"
 )
-
-type pathGroup struct {
-	path   string
-	panes  []backend.Pane
-	lowest int
-}
 
 func projectFlat(result backend.StateResult, homeDir string) (list.Snapshot, itemIndex, error) {
 	return projectFlatRanked(result, homeDir, frecency.Scores{})
@@ -29,11 +26,12 @@ func projectFlatRanked(
 	index := make(itemIndex)
 
 	for _, session := range result.Sessions {
-		if err := appendFlatSession(&snapshot, index, session, result.Active.PaneID, homeDir); err != nil {
+		if err := appendFlatSession(&snapshot, index, session, result.Active, homeDir); err != nil {
 			return list.Snapshot{}, nil, err
 		}
 	}
 
+	disambiguatePaneRows(snapshot.Items, index)
 	sort.Slice(snapshot.Items, func(i, j int) bool {
 		left := index[snapshot.Items[i].ID]
 		right := index[snapshot.Items[j].ID]
@@ -49,14 +47,14 @@ func appendFlatSession(
 	snapshot *list.Snapshot,
 	index itemIndex,
 	session backend.Session,
-	activePaneID string,
+	active backend.ActiveContext,
 	homeDir string,
 ) error {
 	if err := validateStableTmuxID(session.ID, '$', "session"); err != nil {
 		return err
 	}
 	for _, window := range session.Windows {
-		if err := appendFlatWindow(snapshot, index, session, window, activePaneID, homeDir); err != nil {
+		if err := appendFlatWindow(snapshot, index, session, window, active, homeDir); err != nil {
 			return err
 		}
 	}
@@ -68,20 +66,20 @@ func appendFlatWindow(
 	index itemIndex,
 	session backend.Session,
 	window backend.Window,
-	activePaneID string,
+	active backend.ActiveContext,
 	homeDir string,
 ) error {
 	if err := validateStableTmuxID(window.ID, '@', "window"); err != nil {
 		return err
 	}
-	for _, group := range groupPanesByPath(window.Panes) {
-		item, destination, err := projectFlatDestination(session, window, group, homeDir)
+	for _, pane := range window.Panes {
+		item, destination, err := projectFlatDestination(session, window, pane, homeDir)
 		if err != nil {
 			return err
 		}
 		snapshot.Items = append(snapshot.Items, item)
 		index[item.ID] = destination
-		if destination.Target == activePaneID {
+		if pane.ID == active.PaneID && session.ID == active.SessionID {
 			snapshot.ActiveItemID = item.ID
 		}
 	}
@@ -91,10 +89,9 @@ func appendFlatWindow(
 func projectFlatDestination(
 	session backend.Session,
 	window backend.Window,
-	group pathGroup,
+	pane backend.Pane,
 	homeDir string,
 ) (list.Item, liveItem, error) {
-	pane := destinationPane(group.panes)
 	if err := validateStableTmuxID(pane.ID, '%', "pane"); err != nil {
 		return list.Item{}, liveItem{}, err
 	}
@@ -103,17 +100,25 @@ func projectFlatDestination(
 	if name == "" {
 		name = fmt.Sprintf("%d", window.Index)
 	}
-	id := destinationItemID(session.ID, window.ID, group.path)
+	id := destinationItemID(session.ID, window.ID, pane.ID)
 	fields := []list.SearchField{
 		{Tier: list.SearchPrimary, Text: session.Name},
 		{Tier: list.SearchPrimary, Text: name},
 	}
-	fields = appendPathSearchFields(fields, group.path, homeDir)
+	program := paneProgramLabel(pane)
+	if pane.Command != "" {
+		fields = append(fields, list.SearchField{Tier: list.SearchPrimary, Text: pane.Command})
+	}
+	if pane.Program != "" && pane.Program != pane.Command {
+		fields = append(fields, list.SearchField{Tier: list.SearchPrimary, Text: pane.Program})
+	}
+	fields = appendPathSearchFields(fields, pane.Path, homeDir)
 
 	item := list.Item{
 		ID:           id,
 		Primary:      session.Name + "" + name,
-		Secondary:    displayPath(group.path, homeDir),
+		Secondary:    displayPath(pane.Path, homeDir),
+		Trailing:     program,
 		SearchFields: fields,
 	}
 	destination := liveItem{
@@ -125,13 +130,15 @@ func projectFlatDestination(
 		Name:           window.Name,
 		SessionName:    session.Name,
 		WindowName:     window.Name,
-		Target:         pane.ID,
+		Target:         session.ID + ":" + window.ID + "." + pane.ID,
 		MutationTarget: session.ID + ":" + window.ID,
 		SessionTarget:  session.ID,
-		RawPath:        group.path,
+		RawPath:        pane.Path,
 		WindowIndex:    window.Index,
 		WindowActive:   window.Active,
 		PaneActive:     pane.Active,
+		PaneID:         pane.ID,
+		PaneIndex:      pane.Index,
 		Last:           session.Last && window.Active && pane.Active,
 	}
 	if destination.Last {
@@ -164,7 +171,58 @@ func destinationLess(left, right liveItem, scores frecency.Scores) bool {
 	if left.SessionTarget != right.SessionTarget {
 		return left.SessionTarget < right.SessionTarget
 	}
-	return left.WindowID < right.WindowID
+	if left.WindowID != right.WindowID {
+		return left.WindowID < right.WindowID
+	}
+	if left.PaneIndex != right.PaneIndex {
+		return left.PaneIndex < right.PaneIndex
+	}
+	return left.ID < right.ID
+}
+
+// Keep ordinary rows uncluttered. Only otherwise identical pane rows need a
+// visible identifier; this decoration never participates in search or identity.
+func disambiguatePaneRows(items []list.Item, index itemIndex) {
+	type label struct{ primary, path, program string }
+	key := func(item list.Item) label {
+		primary := item.Primary
+		if index[item.ID].Last {
+			primary = strings.TrimSuffix(primary, " ↶")
+		}
+		return label{
+			paneDisplayText(primary),
+			paneDisplayText(item.Secondary),
+			paneDisplayText(item.Trailing),
+		}
+	}
+	counts := make(map[label]int, len(items))
+	labels := make([]label, len(items))
+	for i, item := range items {
+		labels[i] = key(item)
+		counts[labels[i]]++
+	}
+	for i := range items {
+		if counts[labels[i]] < 2 {
+			continue
+		}
+		pane := index[items[i].ID]
+		if pane.Last {
+			items[i].Primary = strings.TrimSuffix(items[i].Primary, " ↶")
+		}
+		items[i].Primary += " [" + pane.PaneID + "]"
+		if pane.Last {
+			items[i].Primary += " ↶"
+		}
+	}
+}
+
+func paneDisplayText(value string) string {
+	// Most pane labels are plain text: avoid allocating sanitized copies of
+	// every field merely to detect duplicates in a large snapshot.
+	if !utf8.ValidString(value) || strings.IndexFunc(value, unicode.IsControl) >= 0 {
+		value = terminal.Sanitize(value)
+	}
+	return strings.TrimSpace(value)
 }
 
 func appendPathSearchFields(fields []list.SearchField, rawPath, homeDir string) []list.SearchField {
@@ -178,45 +236,19 @@ func appendPathSearchFields(fields []list.SearchField, rawPath, homeDir string) 
 	return fields
 }
 
-func groupPanesByPath(panes []backend.Pane) []pathGroup {
-	groups := make([]pathGroup, 0, len(panes))
-	byPath := make(map[string]int, len(panes))
-	for _, pane := range panes {
-		if i, exists := byPath[pane.Path]; exists {
-			groups[i].panes = append(groups[i].panes, pane)
-			if pane.Index < groups[i].lowest {
-				groups[i].lowest = pane.Index
-			}
-			continue
-		}
-		byPath[pane.Path] = len(groups)
-		groups = append(groups, pathGroup{path: pane.Path, panes: []backend.Pane{pane}, lowest: pane.Index})
-	}
-	sort.SliceStable(groups, func(i, j int) bool {
-		if groups[i].lowest == groups[j].lowest {
-			return groups[i].path < groups[j].path
-		}
-		return groups[i].lowest < groups[j].lowest
-	})
-	return groups
+func destinationItemID(sessionID, windowID, paneID string) list.ItemID {
+	return list.ItemID("pane:" + sessionID + ":" + windowID + ":" + paneID)
 }
 
-func destinationPane(panes []backend.Pane) backend.Pane {
-	chosen := panes[0]
-	for _, pane := range panes[1:] {
-		if pane.Active != chosen.Active {
-			if pane.Active {
-				chosen = pane
-			}
-			continue
-		}
-		if pane.Index < chosen.Index {
-			chosen = pane
-		}
+func paneProgramLabel(pane backend.Pane) string {
+	if pane.Dead {
+		return "exited"
 	}
-	return chosen
-}
-
-func destinationItemID(sessionID, windowID, path string) list.ItemID {
-	return list.ItemID("destination:" + sessionID + ":" + windowID + ":" + base64.RawURLEncoding.EncodeToString([]byte(path)))
+	if pane.Program != "" {
+		return pane.Program
+	}
+	if pane.Command != "" {
+		return pane.Command
+	}
+	return "unknown"
 }

@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/MSmaili/hetki/internal/terminal"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 func TestShortenPath(t *testing.T) {
@@ -192,14 +193,81 @@ func TestRenderListAlignsSecondaryColumnsAndTruncatesBothSides(t *testing.T) {
 }
 
 func TestRenderListSanitizesAndFitsNarrowWidths(t *testing.T) {
-	row := rowProps{Primary: "\x1b]0;owned\a中👨‍👩‍👧é\nnext", Secondary: "~/bad\tpath\x1b[2J", JumpLabel: "\x1b[31ma\n"}
-	for width := 0; width <= 12; width++ {
+	row := rowProps{Primary: "\x1b]0;owned\a中👨‍👩‍👧é\nnext", Secondary: "~/bad\tpath\x1b[2J", Trailing: "\x1b]0;owned\api中\ncommand", JumpLabel: "\x1b[31ma\n"}
+	for width := 0; width <= 80; width++ {
 		line := renderList(listProps{Width: width, Rows: []rowProps{row}})[0]
 		if strings.ContainsAny(line, "\x1b\n\r\t") {
 			t.Fatalf("width %d left terminal controls in %q", width, line)
 		}
 		if actual := lipgloss.Width(line); actual > width {
 			t.Fatalf("width %d rendered %q at width %d", width, line, actual)
+		}
+	}
+}
+
+func TestRenderListAlignsTrailingTextAtTheRightEdge(t *testing.T) {
+	for _, compact := range []bool{false, true} {
+		for _, width := range []int{40, 64, 100} {
+			rows := []rowProps{
+				{Primary: "deveditor", Secondary: "~/code", Trailing: "pi", Selected: true},
+				{Primary: "devtests", Secondary: "~/tests", Trailing: "opencode", Active: true, JumpLabel: "a"},
+			}
+			lines := renderList(listProps{Width: width, Rows: rows, Compact: compact, Theme: defaultTheme()})
+			for i, line := range lines {
+				plain := terminal.Sanitize(line)
+				if terminal.Width(plain) != width || !strings.HasSuffix(plain, rows[i].Trailing) {
+					t.Fatalf("width %d: trailing text is not at the right edge: %q", width, plain)
+				}
+				if !strings.Contains(plain, rows[i].Secondary) {
+					t.Fatalf("width %d: path disappeared: %q", width, plain)
+				}
+			}
+			if terminal.Width(strings.Split(terminal.Sanitize(lines[0]), "~/code")[0]) != terminal.Width(strings.Split(terminal.Sanitize(lines[1]), "~/tests")[0]) {
+				t.Fatalf("paths lost their aligned middle column: %#v", lines)
+			}
+		}
+	}
+}
+
+func TestRenderListPreservesCommandWhileShorteningOtherColumns(t *testing.T) {
+	line := renderList(listProps{Width: 40, Rows: []rowProps{{
+		Primary: "a-very-long-sessiona-very-long-window", Secondary: "~/a/very/long/path/src", Trailing: "opencode",
+	}}})[0]
+	if !strings.HasSuffix(line, "opencode") || !strings.Contains(line, "...") || terminal.Width(line) != 40 {
+		t.Fatalf("expected independently fitted columns: %q", line)
+	}
+	line = renderList(listProps{Width: 12, Rows: []rowProps{{Primary: "dev", Trailing: "a-very-long-command"}}})[0]
+	if !strings.Contains(line, "dev") || terminal.Width(line) != 12 {
+		t.Fatalf("long command consumed the label or overflowed: %q", line)
+	}
+}
+
+func TestSelectedRowBackgroundCoversEveryCellThroughTheCommand(t *testing.T) {
+	styles := defaultTheme()
+	wantR, wantG, wantB, wantA := styles.selectedRow.GetBackground().RGBA()
+	for _, compact := range []bool{false, true} {
+		for _, active := range []bool{false, true} {
+			for _, width := range []int{12, 24, 40, 80} {
+				line := renderList(listProps{Width: width, Compact: compact, Theme: styles, Rows: []rowProps{
+					{Primary: "dev editor", Secondary: "~/code", Trailing: "pi", JumpLabel: "a", Selected: true, Active: active},
+					{Primary: "dev tests", Secondary: "~/tests", Trailing: "opencode"},
+				}})[0]
+				if strings.Contains(line, "\n") || terminal.Width(line) != width {
+					t.Fatalf("selected row does not occupy one full-width line: %q", line)
+				}
+				screen := uv.NewScreenBuffer(width, 1)
+				uv.NewStyledString(line).Draw(screen, screen.Bounds())
+				for x := range width {
+					cell := screen.CellAt(x, 0)
+					if cell.Style.Bg == nil {
+						t.Fatalf("width %d: highlight stops at cell %d (%q): %q", width, x, cell.Content, line)
+					}
+					r, g, b, a := cell.Style.Bg.RGBA()
+					if r != wantR || g != wantG || b != wantB || a != wantA {
+						t.Fatalf("width %d: wrong highlight at cell %d (%q)", width, x, cell.Content)
+					}
+				}
+			}
 		}
 	}
 }

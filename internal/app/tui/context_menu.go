@@ -15,7 +15,7 @@ func contextualMenu(item liveItem) (ui.ItemMenu, error) {
 	case liveWindow:
 		title, openLabel = "WINDOW ACTIONS", "Open window"
 	case liveDestination:
-		title, openLabel = "DESTINATION ACTIONS", "Open destination"
+		title, openLabel = "PANE ACTIONS", "Open pane"
 	default:
 		return ui.ItemMenu{}, fmt.Errorf("item %q has an unknown kind", item.ID)
 	}

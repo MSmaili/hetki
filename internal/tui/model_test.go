@@ -89,6 +89,19 @@ func TestViewKeepsSecondaryTextOnItsRowWithoutGlobalHelp(t *testing.T) {
 	t.Fatal("editor row not rendered")
 }
 
+func TestViewPassesTrailingTextToTheRightColumn(t *testing.T) {
+	m := browseModel(newModel(list.Snapshot{Items: []list.Item{{
+		ID: "pane", Primary: "deveditor", Secondary: "~/code", Trailing: "pi",
+	}}}, nil))
+	m.width, m.height = 80, 20
+	m = m.reflow()
+	line := terminal.Sanitize(m.viewList(m.layout()))
+	require.Contains(t, line, "deveditor")
+	require.Contains(t, line, "~/code")
+	require.True(t, strings.HasSuffix(line, "pi"))
+	require.Equal(t, m.layout().listWidth, terminal.Width(line))
+}
+
 func TestCompactLayoutKeepsItsEdges(t *testing.T) {
 	for _, width := range []int{4, 12, 24, 40} {
 		style := responsiveFrameStyle(defaultTheme().appBorder, width, 8)

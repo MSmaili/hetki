@@ -147,7 +147,7 @@ func TestQueryStatePropagatesRealFailures(t *testing.T) {
 func TestQueryStatePreservesStableObjectIDsAndPaneIndex(t *testing.T) {
 	t.Setenv("TMUX", ",,1")
 	b := &TmuxBackend{client: &MockClient{RunFunc: func(_ context.Context, args ...string) (string, error) {
-		return "0\n1\n$1|dev|@2|editor|3|layout-a|0|1|%7|4|1|~/code|vim|", nil
+		return "0\n1\n$1|dev|@2|editor|3|layout-a|0|1|%7|4|1|~/code|vim||100|0", nil
 	}}}
 
 	result, err := b.QueryState(context.Background())
@@ -373,6 +373,12 @@ func TestSwitchValidatesAndResolvesTargets(t *testing.T) {
 		{name: "malformed session ID", target: "$bad", wantErr: "invalid session ID"},
 		{name: "malformed window ID", target: "core:@bad", wantErr: "invalid window ID"},
 		{name: "malformed pane ID", target: "%bad", wantErr: "invalid pane ID"},
+		{name: "scoped pane", target: "$1:@1.%1", wantNav: "$1:1.0"},
+		{name: "scoped stale pane", target: "$1:@1.%2", wantErr: "not found"},
+		{name: "scoped stale window", target: "$1:@99.%1", wantErr: "not found"},
+		{name: "scoped malformed pane", target: "$1:@1.%bad", wantErr: "invalid pane ID"},
+		{name: "scoped session must be ID", target: "core:@1.%1", wantErr: "invalid session ID"},
+		{name: "scoped window must be ID", target: "$1:editor.%1", wantErr: "invalid window ID"},
 		{name: "pane index overflow", target: "core:editor." + strconv.Itoa(math.MaxInt), wantErr: "pane index overflows"},
 		{name: "ambiguous name collision", target: "a:b", wantErr: "ambiguous switch target"},
 		{name: "ID ref ignores name shadow", target: "$1:editor", wantNav: "$1:1"},

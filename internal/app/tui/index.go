@@ -31,6 +31,8 @@ type liveItem struct {
 	WindowIndex    int
 	WindowActive   bool
 	PaneActive     bool
+	PaneID         string
+	PaneIndex      int
 	Last           bool
 }
 

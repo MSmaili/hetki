@@ -12,6 +12,7 @@ type rowProps struct {
 	ItemID     string
 	Primary    string
 	Secondary  string
+	Trailing   string
 	JumpLabel  string
 	Depth      int
 	TreePrefix string
@@ -36,22 +37,40 @@ func renderList(props listProps) []string {
 	left := make([]string, len(props.Rows))
 	columnWidth := 0
 	secondaryWidth := 0
+	trailingWidth := 0
 	alignSecondary := false
 	for i, row := range props.Rows {
 		left[i] = renderRowLine(row, props.Theme, props.Compact)
 		columnWidth = max(columnWidth, terminal.Width(left[i]))
 		secondaryWidth = max(secondaryWidth, terminal.Width(strings.TrimSpace(terminal.Sanitize(row.Secondary))))
+		trailingWidth = max(trailingWidth, terminal.Width(strings.TrimSpace(terminal.Sanitize(row.Trailing))))
 		alignSecondary = alignSecondary || (row.Depth == 0 && strings.TrimSpace(row.Secondary) != "")
 	}
 	const gap = 2
 	const minSecondaryWidth = 6
-	if alignSecondary && secondaryWidth > 0 && props.Width >= gap+minSecondaryWidth {
-		reserve := min(secondaryWidth, max(minSecondaryWidth, props.Width/2))
-		columnWidth = min(columnWidth, props.Width-gap-reserve)
+	// Reserve the right column before fitting labels and paths. Long trailing
+	// text must not consume the entire row, including in a narrow preview split.
+	trailingWidth = min(trailingWidth, max(0, props.Width/3))
+	bodyWidth := props.Width
+	if trailingWidth > 0 {
+		bodyWidth = max(0, props.Width-gap-trailingWidth)
+	}
+	if alignSecondary && secondaryWidth > 0 && bodyWidth >= gap+minSecondaryWidth {
+		reserve := min(secondaryWidth, max(minSecondaryWidth, bodyWidth/2))
+		columnWidth = min(columnWidth, bodyWidth-gap-reserve)
 	}
 	lines := make([]string, 0, len(props.Rows))
 	for i, row := range props.Rows {
-		line := composeRowLine(row, left[i], columnWidth, props.Width, props.Compact, alignSecondary, props.Theme)
+		line := composeRowLine(row, left[i], columnWidth, bodyWidth, props.Compact, alignSecondary, props.Theme)
+		if trailingWidth > 0 {
+			trailing := truncateWidth(strings.TrimSpace(terminal.Sanitize(row.Trailing)), trailingWidth)
+			if trailing != "" {
+				padding := max(0, props.Width-terminal.Width(line)-terminal.Width(trailing))
+				// The path's nested style resets ANSI attributes. Reapply the
+				// row style to both the remaining gap and right-hand text.
+				line += props.Theme.itemStyle(row.Active, row.Selected).Render(strings.Repeat(" ", padding) + trailing)
+			}
+		}
 		lines = append(lines, styleRowLine(row, line, props.Width, props.Theme))
 	}
 	return lines

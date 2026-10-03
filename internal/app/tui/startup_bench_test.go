@@ -15,7 +15,7 @@ import (
 	"github.com/MSmaili/hetki/internal/tui/list"
 )
 
-// One pane and unique path per window; four flat search fields, including the
+// One pane and unique path per window; five flat search fields, including the
 // shortened home path. Fixture construction and disk writes aren't timed.
 func benchmarkWorkspace(windows int) (backend.StateResult, []frecency.Record, string) {
 	state := backend.StateResult{Active: backend.ActiveContext{SessionID: "$0", WindowID: "@0", PaneID: "%0"}}
@@ -30,7 +30,7 @@ func benchmarkWorkspace(windows int) (backend.StateResult, []frecency.Record, st
 			path := fmt.Sprintf("/home/bench/Projects/%s/%s", session.Name, names[w])
 			window := backend.Window{
 				ID: fmt.Sprintf("@%d", id), Name: names[w], Index: w, Path: path, Active: w == 0,
-				Panes: []backend.Pane{{ID: fmt.Sprintf("%%%d", id), Path: path, Active: true}},
+				Panes: []backend.Pane{{ID: fmt.Sprintf("%%%d", id), Path: path, Command: "zsh", Active: true}},
 			}
 			session.Windows = append(session.Windows, window)
 			records = append(records, frecency.Record{Path: path, Session: session.Name, Rank: float64(id%3 + 1), LastUsed: 2_000_000})

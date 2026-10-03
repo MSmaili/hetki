@@ -28,6 +28,7 @@ type Item struct {
 	ID           ItemID
 	Primary      string
 	Secondary    string
+	Trailing     string // Optional right-aligned text, independent of search fields.
 	SearchFields []SearchField
 	Children     []Item
 }

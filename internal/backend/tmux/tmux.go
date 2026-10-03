@@ -46,7 +46,7 @@ func (b *TmuxBackend) QueryState(ctx context.Context) (backend.StateResult, erro
 	}
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
-	result, err := RunQuery(ctx, b.client, LoadStateQuery{IncludeClients: isInsideTmux()})
+	result, err := RunQuery(ctx, b.client, LoadStateQuery{IncludeClients: isInsideTmux(), IncludeProgramInfo: true})
 
 	// tmux exits non-zero when list-panes runs against an empty server, after the
 	// chained show-options calls have already emitted valid base indexes.
@@ -56,6 +56,7 @@ func (b *TmuxBackend) QueryState(ctx context.Context) (backend.StateResult, erro
 	}
 
 	currentClient := invokingClient(result.clients)
+	programs := newProgramLookup(ctx)
 	sessions := make([]backend.Session, len(result.Sessions))
 	for i, s := range result.Sessions {
 		windows := make([]backend.Window, len(s.Windows))
@@ -67,6 +68,8 @@ func (b *TmuxBackend) QueryState(ctx context.Context) (backend.StateResult, erro
 					Index:   p.Index,
 					Path:    p.Path,
 					Command: p.Command,
+					Program: programs.resolve(p),
+					Dead:    p.Dead,
 					Zoom:    p.Zoom,
 					Active:  p.Active,
 				}
@@ -189,6 +192,22 @@ func (b *TmuxBackend) Switch(ctx context.Context, target string) error {
 	}
 	pane := -1
 	if hasPane {
+		if strings.HasPrefix(paneStr, "%") {
+			if err := validateObjectID("pane", paneStr, '%'); err != nil {
+				return err
+			}
+			queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+			state, err := RunQuery(queryCtx, b.client, LoadStateQuery{})
+			cancel()
+			if err != nil {
+				return err
+			}
+			resolved, err := resolveScopedPaneTarget(state.Sessions, session, window, paneStr)
+			if err != nil {
+				return err
+			}
+			return b.switchTo(ctx, resolved)
+		}
 		var err error
 		if pane, err = strconv.Atoi(paneStr); err != nil || pane < 0 {
 			return fmt.Errorf("invalid switch target %q: invalid pane index %q", target, paneStr)
@@ -279,6 +298,33 @@ func resolvePaneTarget(sessions []Session, paneID string) (string, error) {
 		return "", fmt.Errorf("pane ID %q not found", paneID)
 	}
 	return resolved, nil
+}
+
+// Pane IDs can occur in multiple linked sessions. A pane row carries its
+// session/window occurrence rather than guessing which link the user meant.
+func resolveScopedPaneTarget(sessions []Session, sessionID, windowID, paneID string) (string, error) {
+	if err := validateObjectID("session", sessionID, '$'); err != nil {
+		return "", err
+	}
+	if err := validateObjectID("window", windowID, '@'); err != nil {
+		return "", err
+	}
+	for _, session := range sessions {
+		if session.ID != sessionID {
+			continue
+		}
+		for _, window := range session.Windows {
+			if window.ID != windowID {
+				continue
+			}
+			for _, pane := range window.Panes {
+				if pane.ID == paneID {
+					return fmt.Sprintf("%s:%d.%d", session.ID, window.Index, pane.Index), nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("pane %q not found in %s:%s", paneID, sessionID, windowID)
 }
 
 func windowNameExists(sessions []Session, sessionRef, name string) bool {

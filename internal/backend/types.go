@@ -28,6 +28,9 @@ type Pane struct {
 	Index   int
 	Path    string
 	Command string
+	// Program is an optional foreground naming hint; Command remains the tmux fact.
+	Program string
+	Dead    bool
 	Zoom    bool
 	Active  bool
 }

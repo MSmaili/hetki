@@ -12,38 +12,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProjectFlatBuildsStablePathDestinations(t *testing.T) {
+func TestProjectFlatBuildsStablePaneDestinations(t *testing.T) {
 	state := backend.StateResult{
 		Sessions: []backend.Session{{
 			ID: "$1", Name: "dev", Windows: []backend.Window{
 				{ID: "@1", Name: "editor", Index: 1, Active: true, Panes: []backend.Pane{
-					{ID: "%5", Index: 5, Path: "/home/me/code"},
-					{ID: "%7", Index: 7, Path: "/home/me/code", Active: true},
+					{ID: "%5", Index: 5, Path: "/home/me/code", Command: "node"},
+					{ID: "%7", Index: 7, Path: "/home/me/code", Command: "node", Program: "pi", Active: true},
 					{ID: "%2", Index: 2, Path: "/var/log"},
 				}},
 				{ID: "@2", Name: "tests", Index: 2, Panes: []backend.Pane{{ID: "%8", Index: 0, Path: "/home/me/code", Active: true}}},
 			},
 		}},
-		Active: backend.ActiveContext{PaneID: "%7"},
+		Active: backend.ActiveContext{SessionID: "$1", PaneID: "%7"},
 	}
 
 	snapshot, index, err := projectFlat(state, "/home/me")
 	require.NoError(t, err)
-	require.Len(t, snapshot.Items, 3)
+	require.Len(t, snapshot.Items, 4)
 
-	codeID := destinationItemID("$1", "@1", "/home/me/code")
+	codeID := destinationItemID("$1", "@1", "%7")
 	code := index[codeID]
-	assert.Equal(t, "%7", code.Target, "the active pane owns a collapsed path destination")
+	assert.Equal(t, "$1:@1.%7", code.Target)
 	assert.Equal(t, "$1:@1", code.MutationTarget)
 	assert.Equal(t, "deveditor", itemByID(snapshot.Items, codeID).Primary)
+	assert.Equal(t, "pi", itemByID(snapshot.Items, codeID).Trailing)
+	assert.Equal(t, "node", itemByID(snapshot.Items, destinationItemID("$1", "@1", "%5")).Trailing)
 	assert.Equal(t, "~/code", itemByID(snapshot.Items, codeID).Secondary)
 	assert.Equal(t, codeID, snapshot.ActiveItemID)
-	assert.NotEqual(t, codeID, destinationItemID("$1", "@2", "/home/me/code"))
+	assert.NotEqual(t, codeID, destinationItemID("$1", "@2", "%7"))
 
 	fields := itemByID(snapshot.Items, codeID).SearchFields
 	assert.Equal(t, []list.SearchField{
 		{Tier: list.SearchPrimary, Text: "dev"},
 		{Tier: list.SearchPrimary, Text: "editor"},
+		{Tier: list.SearchPrimary, Text: "node"},
+		{Tier: list.SearchPrimary, Text: "pi"},
 		{Tier: list.SearchSecondary, Text: "/home/me/code"},
 		{Tier: list.SearchSecondary, Text: "~/code"},
 	}, fields)
@@ -61,9 +65,9 @@ func TestProjectFlatKeepsDuplicateAndDelimitedContextsDistinct(t *testing.T) {
 	snapshot, index, err := projectFlat(state, "")
 	require.NoError(t, err)
 	require.Len(t, snapshot.Items, 3)
-	assert.Equal(t, "%1", index[destinationItemID("$1", "@1", "/work/a:b\tctx")].Target)
-	assert.Equal(t, "%3", index[destinationItemID("$1", "@3", "/work/a:b\tctx")].Target)
-	assert.Equal(t, "%2", index[destinationItemID("$2", "@2", "/work/a:b\tctx")].Target)
+	assert.Equal(t, "$1:@1.%1", index[destinationItemID("$1", "@1", "%1")].Target)
+	assert.Equal(t, "$1:@3.%3", index[destinationItemID("$1", "@3", "%3")].Target)
+	assert.Equal(t, "$2:@2.%2", index[destinationItemID("$2", "@2", "%2")].Target)
 }
 
 func TestProjectFlatAllowsWindowsWithoutPanes(t *testing.T) {
@@ -77,7 +81,7 @@ func TestProjectFlatAllowsWindowsWithoutPanes(t *testing.T) {
 	assert.Empty(t, index)
 }
 
-func TestProjectFlatUsesLowestPaneIndexWithoutAnActivePane(t *testing.T) {
+func TestProjectFlatKeepsEveryPaneWithoutAnActivePane(t *testing.T) {
 	state := backend.StateResult{Sessions: []backend.Session{{
 		ID: "$1", Name: "dev", Windows: []backend.Window{{
 			ID: "@1", Name: "editor", Panes: []backend.Pane{
@@ -87,12 +91,15 @@ func TestProjectFlatUsesLowestPaneIndexWithoutAnActivePane(t *testing.T) {
 		}},
 	}}}
 
-	_, index, err := projectFlat(state, "")
+	snapshot, index, err := projectFlat(state, "")
 	require.NoError(t, err)
-	assert.Equal(t, "%2", index[destinationItemID("$1", "@1", "/code")].Target)
+	require.Len(t, snapshot.Items, 2)
+	assert.Equal(t, "$1:@1.%2", index[destinationItemID("$1", "@1", "%2")].Target)
+	assert.Equal(t, "$1:@1.%9", index[destinationItemID("$1", "@1", "%9")].Target)
+	assert.Equal(t, destinationItemID("$1", "@1", "%2"), snapshot.Items[0].ID)
 }
 
-func TestProjectFlatKeepsRawPathsAsIdentity(t *testing.T) {
+func TestProjectFlatKeepsPanesWithEquivalentDisplayPathsDistinct(t *testing.T) {
 	state := backend.StateResult{Sessions: []backend.Session{{
 		ID: "$1", Name: "dev", Windows: []backend.Window{{
 			ID: "@1", Name: "editor", Panes: []backend.Pane{
@@ -121,12 +128,12 @@ func TestFlatProjectionSearchesSessionWindowAndPathWithNamePriority(t *testing.T
 
 	model.SetQuery("needle")
 	require.Len(t, model.Rows(), 2)
-	assert.Equal(t, destinationItemID("$1", "@1", "/work/code"), model.Rows()[0].Item.ID)
+	assert.Equal(t, destinationItemID("$1", "@1", "%1"), model.Rows()[0].Item.ID)
 	model.SetQuery("editor")
 	require.Len(t, model.Rows(), 1)
 	model.SetQuery("work/needle")
 	require.Len(t, model.Rows(), 1)
-	assert.Equal(t, destinationItemID("$2", "@2", "/work/needle"), model.Rows()[0].Item.ID)
+	assert.Equal(t, destinationItemID("$2", "@2", "%2"), model.Rows()[0].Item.ID)
 }
 
 func TestProjectFlatRejectsUnstablePaneIDs(t *testing.T) {
@@ -138,6 +145,77 @@ func TestProjectFlatRejectsUnstablePaneIDs(t *testing.T) {
 
 	_, _, err := projectFlat(state, "")
 	require.ErrorContains(t, err, "pane must have a stable %N ID")
+}
+
+func TestProjectFlatIdentitySurvivesPathCommandAndIndexChanges(t *testing.T) {
+	state := backend.StateResult{Sessions: []backend.Session{{
+		ID: "$1", Name: "dev", Windows: []backend.Window{{
+			ID: "@1", Name: "editor", Panes: []backend.Pane{{ID: "%1", Command: "node", Path: "/before"}},
+		}},
+	}}}
+	before, beforeIndex, err := projectFlat(state, "")
+	require.NoError(t, err)
+	pane := &state.Sessions[0].Windows[0].Panes[0]
+	pane.Command, pane.Program, pane.Path, pane.Index = "node", "pi", "/after", 4
+	after, afterIndex, err := projectFlat(state, "")
+	require.NoError(t, err)
+	require.Equal(t, before.Items[0].ID, after.Items[0].ID)
+	require.Equal(t, beforeIndex[before.Items[0].ID].Target, afterIndex[after.Items[0].ID].Target)
+	model, err := list.New(after)
+	require.NoError(t, err)
+	for _, query := range []string{"pi", "node", "after"} {
+		model.SetQuery(query)
+		require.Len(t, model.Rows(), 1, query)
+	}
+	pane.Dead = true
+	dead, _, err := projectFlat(state, "")
+	require.NoError(t, err)
+	require.Equal(t, "exited", dead.Items[0].Trailing)
+}
+
+func TestProjectFlatKeepsLinkedPaneOccurrencesDistinct(t *testing.T) {
+	window := backend.Window{ID: "@1", Name: "shared", Panes: []backend.Pane{{ID: "%1", Path: "/same", Command: "node"}}}
+	state := backend.StateResult{
+		Sessions: []backend.Session{{ID: "$1", Name: "first", Windows: []backend.Window{window}}, {ID: "$2", Name: "second", Windows: []backend.Window{window}}},
+		Active:   backend.ActiveContext{SessionID: "$2", PaneID: "%1"},
+	}
+	snapshot, index, err := projectFlat(state, "")
+	require.NoError(t, err)
+	require.Len(t, snapshot.Items, 2)
+	require.Equal(t, destinationItemID("$2", "@1", "%1"), snapshot.ActiveItemID)
+	require.Equal(t, "$1:@1.%1", index[destinationItemID("$1", "@1", "%1")].Target)
+	require.Equal(t, "$2:@1.%1", index[destinationItemID("$2", "@1", "%1")].Target)
+}
+
+func TestProjectFlatOnlyLabelsOtherwiseIdenticalPanes(t *testing.T) {
+	state := backend.StateResult{Sessions: []backend.Session{{
+		ID: "$1", Name: "dev", Windows: []backend.Window{{
+			ID: "@1", Name: "editor", Panes: []backend.Pane{
+				{ID: "%1", Index: 0, Path: "/code", Command: "node", Program: "pi", Active: true},
+				{ID: "%2", Index: 1, Path: "/code", Command: "node", Program: "pi"},
+				{ID: "%3", Index: 2, Path: "/code", Command: "nvim"},
+				{ID: "%4", Index: 3, Path: "/other", Command: "node", Program: "pi"},
+			},
+		}},
+	}}}
+	snapshot, index, err := projectFlat(state, "")
+	require.NoError(t, err)
+	require.Equal(t, "deveditor [%1]", itemByID(snapshot.Items, destinationItemID("$1", "@1", "%1")).Primary)
+	require.Equal(t, "deveditor [%2]", itemByID(snapshot.Items, destinationItemID("$1", "@1", "%2")).Primary)
+	for _, paneID := range []string{"%3", "%4"} {
+		require.Equal(t, "deveditor", itemByID(snapshot.Items, destinationItemID("$1", "@1", paneID)).Primary)
+	}
+	state.Sessions[0].Last = true
+	first := destinationItemID("$1", "@1", "%1")
+	// The last-session marker must not defeat duplicate detection or change
+	// search fields, ordering, stable identity, or the indexed target.
+	state.Sessions[0].Windows[0].Active = true
+	marked, markedIndex, err := projectFlat(state, "")
+	require.NoError(t, err)
+	require.Equal(t, "deveditor [%1] ↶", itemByID(marked.Items, first).Primary)
+	require.Equal(t, itemByID(snapshot.Items, first).SearchFields, itemByID(marked.Items, first).SearchFields)
+	require.Equal(t, index[first].Target, markedIndex[first].Target)
+	require.Equal(t, itemIDs(snapshot.Items), itemIDs(marked.Items))
 }
 
 func itemByID(items []list.Item, id list.ItemID) list.Item {
@@ -169,17 +247,17 @@ func TestProjectFlatUsesTotalFrecencyOrderAndFilteredTieBreaks(t *testing.T) {
 	snapshot, _, err := projectFlatRanked(state, "", scores)
 	require.NoError(t, err)
 	assert.Equal(t, []list.ItemID{
-		destinationItemID("$1", "@1", "/hot"),
-		destinationItemID("$2", "@2", "/cold"),
-		destinationItemID("$3", "@4", "/shared"),
-		destinationItemID("$2", "@3", "/shared"),
+		destinationItemID("$1", "@1", "%1"),
+		destinationItemID("$2", "@2", "%2"),
+		destinationItemID("$3", "@4", "%4"),
+		destinationItemID("$2", "@3", "%3"),
 	}, itemIDs(snapshot.Items))
 
 	model, err := list.New(snapshot)
 	require.NoError(t, err)
 	model.SetQuery("shared")
 	require.Len(t, model.Rows(), 2)
-	assert.Equal(t, destinationItemID("$3", "@4", "/shared"), model.Rows()[0].Item.ID)
+	assert.Equal(t, destinationItemID("$3", "@4", "%4"), model.Rows()[0].Item.ID)
 }
 
 func TestDestinationOrderHasDeterministicFallbacks(t *testing.T) {

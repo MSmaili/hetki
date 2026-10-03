@@ -41,7 +41,7 @@ func TestPreviewResolvesOnlyTheSelectedTarget(t *testing.T) {
 	require.Empty(t, stub.switchCalls)
 	require.Nil(t, adapter.pendingRecord)
 
-	// Same-path collapse must preview precisely the pane indexed for Open.
+	// Same-path panes must preview precisely the selected pane.
 	state := liveState()
 	window := &state.Sessions[0].Windows[0]
 	window.Panes = append(window.Panes, window.Panes[0])
@@ -49,11 +49,11 @@ func TestPreviewResolvesOnlyTheSelectedTarget(t *testing.T) {
 	stub.state = state
 	_, err := adapter.toggleProjection(context.Background(), "window:@1")
 	require.NoError(t, err)
-	id := destinationItemID("$1", "@1", "/work/editor")
+	id := destinationItemID("$1", "@1", "%1")
 	_, err = adapter.Preview(context.Background(), id)
 	require.NoError(t, err)
 	require.Equal(t, "%1", targets[len(targets)-1])
-	require.Equal(t, adapter.index[id].Target, targets[len(targets)-1])
+	require.Equal(t, adapter.index[id].PaneID, targets[len(targets)-1])
 	require.Equal(t, 2, stub.queryCalls)
 
 	_, err = adapter.Preview(context.Background(), "removed")
